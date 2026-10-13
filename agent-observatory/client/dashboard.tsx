@@ -189,14 +189,14 @@ export function DashboardView({ theme, layout, host, navigation, workspaceId, in
   /** Unread results per host, using the same "in scope and not snoozed" rule as the 未读 quick scope. */
   const unreadByHost = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const agent of harvestScopeAll) if (isUnreadCompletion(agent) && !snoozedAt(agent)) {
+    for (const agent of harvestScopeAll) if (!agent.parentAgentId && isUnreadCompletion(agent) && !snoozedAt(agent)) {
       const hostId = (agent as Partial<HostAgent>).hostId ?? host.id;
       counts.set(hostId, (counts.get(hostId) ?? 0) + 1);
     }
     return counts;
   }, [harvestScopeAll, snoozedAt, host.id]);
   const attentionOf = useCallback((agent: AgentRecord) => needsAttention(agent, snoozedAt(agent)), [snoozedAt]);
-  const counts = useMemo(() => { let attention = 0, approvals = 0, running = 0, unread = 0, snoozed = 0, idle = 0; for (const agent of harvestScope) { if (attentionOf(agent)) attention++; if (!agent.archivedAt && (agent.pendingPermissionCount > 0 || agent.status === "waiting")) approvals++; if (matchesStatus(agent.status, "running")) running++; if (agent.status === "idle" && !agent.archivedAt && !agent.pendingPermissionCount) idle++; if (isUnreadCompletion(agent)) { if (snoozedAt(agent)) snoozed++; else unread++; } } return { attention, approvals, running, unread, snoozed, idle }; }, [harvestScope, attentionOf, snoozedAt]);
+  const counts = useMemo(() => { let attention = 0, approvals = 0, running = 0, unread = 0, snoozed = 0, idle = 0; for (const agent of harvestScope) { if (agent.parentAgentId) continue; if (attentionOf(agent)) attention++; if (!agent.archivedAt && (agent.pendingPermissionCount > 0 || agent.status === "waiting")) approvals++; if (matchesStatus(agent.status, "running")) running++; if (agent.status === "idle" && !agent.archivedAt && !agent.pendingPermissionCount) idle++; if (isUnreadCompletion(agent)) { if (snoozedAt(agent)) snoozed++; else unread++; } } return { attention, approvals, running, unread, snoozed, idle }; }, [harvestScope, attentionOf, snoozedAt]);
   // Search and state filters reveal matching descendants (see buildDashboardRows); place filters keep the tree as is.
   const revealing = !!query.trim() || status !== "all" || readFilter !== "all" || focus !== "all";
   const filtered = revealing || workspace !== (workspaceId ?? "all") || project !== "all" || checkout !== "all" || provider !== "all" || sessionScope !== "all";
@@ -326,7 +326,7 @@ export function DashboardView({ theme, layout, host, navigation, workspaceId, in
   ];
   // Each view has its own colours. Phones show the unselected views as coloured icons only.
   const tabs: ViewTab<DashboardTab>[] = [
-    { value: "agents", label: "会话", icon: "MessagesSquare", colors: ["sky", "blue"], count: !compact && known ? scoped.length : undefined },
+    { value: "agents", label: "会话", icon: "MessagesSquare", colors: ["sky", "blue"], count: !compact && known ? rows.filter(row => row.depth === 0).length : undefined },
     { value: "board", label: "看板", icon: "LayoutDashboard", colors: ["pink", "fuchsia"] },
     { value: "tokens", label: "Token", icon: "Coins", colors: ["amber", "orange"] },
     { value: "analytics", label: "明细", icon: "ChartColumn", colors: ["violet", "indigo"] },

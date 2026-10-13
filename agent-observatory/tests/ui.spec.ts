@@ -123,22 +123,22 @@ test("overview quick scopes, status filtering, search, and fixture screenshot", 
   page.on("pageerror", error => errors.push(error.message));
   page.on("console", message => { if (message.type() === "error") errors.push(message.text()); });
   await open(page, testInfo);
-  await expect(page.getByRole("button", { name: "需要处理 4", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "执行中 3", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "未读 2", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "需要处理 3", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "执行中 2", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "未读 1", exact: true })).toBeVisible();
   // The first session is on screen right under the toolbar and chips.
   const first = await page.getByRole("button", { name: "查看 审查数据库迁移，待审批", exact: true }).boundingBox();
   expect(first!.y).toBeLessThan(40 + 160);
   await noHorizontalOverflow(page);
   await screenshot(page, testInfo, "overview");
-  await page.getByRole("button", { name: "需要处理 4", exact: true }).click();
+  await page.getByRole("button", { name: "需要处理 3", exact: true }).click();
   await expect(page.getByRole("button", { name: "查看 检查发布流水线，异常", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "查看 整理性能基线，已完成", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "查看 规划下一轮迭代，待回复", exact: true })).toHaveCount(0);
-  await page.getByRole("button", { name: "执行中 3", exact: true }).click();
+  await page.getByRole("button", { name: "执行中 2", exact: true }).click();
   await expect(page.getByRole("button", { name: "查看 重构支付服务，执行中", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "查看 审查数据库迁移，待审批", exact: true })).toHaveCount(0);
-  await page.getByRole("button", { name: "执行中 3", exact: true }).click();
+  await page.getByRole("button", { name: "执行中 2", exact: true }).click();
   const filters = await openFilters(page);
   await filters.getByRole("button", { name: "待审批", exact: true }).click();
   await closeFilters(page);
@@ -586,7 +586,7 @@ test("renamed project badges and historical restoration preserve the original Ag
 
 test("unread completion harvest preserves ancestors and excludes completed read siblings", async ({ page }, testInfo) => {
   await open(page, testInfo);
-  const unread = page.getByRole("button", { name: "未读 2", exact: true });
+  const unread = page.getByRole("button", { name: "未读 1", exact: true });
   await expect(unread).toBeVisible();
   await unread.click();
   await expect(page.getByRole("button", { name: "查看 重构支付服务，执行中", exact: true })).toBeVisible();
@@ -613,7 +613,7 @@ test("viewing results keeps them unread until an explicit acknowledgement and a 
   await expect(detail.getByRole("button", { name: "已读并看下一个", exact: true })).toBeVisible();
   await detail.getByRole("tab", { name: "诊断", exact: true }).click();
   await closeDetail(page);
-  await expect(page.getByRole("button", { name: "未读 2", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "未读 1", exact: true })).toBeVisible();
   expect(await marks(page)).toEqual([]);
 
   await page.getByRole("button", { name: "查看 整理性能基线，已完成", exact: true }).click();
@@ -629,7 +629,7 @@ test("viewing results keeps them unread until an explicit acknowledgement and a 
   expect(recorded[0]!.input.agentId).toBe("performance-baseline");
 
   await page.evaluate(() => (globalThis as Fixture).__previewCompleteAgent("performance-baseline"));
-  await expect(page.getByRole("button", { name: "未读 2", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "未读 1", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "查看 整理性能基线，已完成", exact: true }).getByLabel("已完成，未读结果", { exact: true })).toBeVisible();
 });
 
@@ -723,9 +723,9 @@ test("failed acknowledgement preserves unread highlighting and archives never en
   await expect(detail.getByRole("button", { name: "已读并看下一个", exact: true })).toBeVisible();
   await expect(detail.getByLabel("已完成，未读结果", { exact: true })).toBeVisible();
   await closeDetail(page);
-  await expect(page.getByRole("button", { name: "未读 2", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "未读 1", exact: true })).toBeVisible();
   await page.evaluate(() => (globalThis as Fixture).__previewUpdateAgent("archived-cycle", { requiresAttention: true }));
-  await expect(page.getByRole("button", { name: "未读 2", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "未读 1", exact: true })).toBeVisible();
   await openArchiveView(page);
   await expect(page.getByRole("button", { name: /^未读/ })).toHaveCount(0);
   await selectRange(page, "全部时间");
@@ -842,7 +842,7 @@ test("snooze and next-result queue target one completion version and never clear
   expect((await marks(page)).length).toBe(0);
   const next = await page.evaluate(() => (globalThis as Fixture).__previewCompleteAgent("performance-baseline"));
   expect(next.attentionTimestamp).not.toBe(originalToken);
-  await expect(page.getByRole("button", { name: "未读 2", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "未读 1", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "查看 整理性能基线，已完成", exact: true }).click();
   detail = page.getByTestId("agent-detail");
   await expect(detail.getByText(next.previewReply.text, { exact: true })).toBeVisible();
