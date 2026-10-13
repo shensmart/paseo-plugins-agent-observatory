@@ -1,5 +1,12 @@
 # Paseo plugins
 
+> **Fork notice.** This repository is a fork of
+> [zhjiang22/paseo-plugins](https://github.com/zhjiang22/paseo-plugins), originally created and
+> maintained by **zhjiang22**. The upstream project is released under the MIT License;
+> modifications in this fork are maintained by
+> [shensmart](https://github.com/shensmart). Please send issues and pull
+> requests about fork-only changes here, and check the upstream repository for the original work.
+
 Plugins for [Paseo](https://paseo.sh). Each directory is a separate plugin with its own `paseo-plugin.json`, `OVERVIEW.md`, README and license. The plugin interfaces are in Simplified Chinese.
 
 | Plugin | Directory | What it does |
@@ -33,5 +40,7 @@ npm test
 ```
 
 ## 中文说明
+
+> **Fork 说明**：本仓库 fork 自 [zhjiang22/paseo-plugins](https://github.com/zhjiang22/paseo-plugins)，原作者为 **zhjiang22**，上游项目以 MIT License 发布。本仓库中的后续修改由 [shensmart](https://github.com/shensmart) 维护。仅针对本仓库新增改动的问题和 PR 请提到这里；原始实现请参考上游仓库。
 
 这里是几个 [Paseo](https://paseo.sh) 插件，界面都是简体中文。每个目录是一个独立插件，各自带 `OVERVIEW.md`、README 和许可证（MIT）。安装方式见上面的 Install；每个插件读写哪些文件、会不会联网或启动进程，都写在各自的 `OVERVIEW.md` 里。

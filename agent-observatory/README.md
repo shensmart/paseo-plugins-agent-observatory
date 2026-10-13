@@ -1,5 +1,10 @@
 # Agent 观测台（Agent Observatory）
 
+> **Fork 来源**：本插件 fork 自原作者 **zhjiang22** 的项目
+> [zhjiang22/paseo-plugins](https://github.com/zhjiang22/paseo-plugins) 中的 Agent Observatory，
+> 上游以 MIT License 发布。本仓库在其基础上继续修改和维护，维护者为
+> [shensmart](https://github.com/shensmart)。
+
 从项目和 worktree 看任务，从最新回复看结果。一个面向 Paseo 0.11 的原生可观测插件，支持手机、桌面和深浅主题。界面是简体中文。
 
 ![会话与结果，虚构数据](assets/screenshot-sessions.png)
