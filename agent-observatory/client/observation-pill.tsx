@@ -16,7 +16,7 @@ export function contributeObservationPills(client: PluginClientContext) {
         title: "打开当前 Agent 的观测台",
         icon: "Activity",
         label: "观测台",
-        behavior: { kind: "action", onPress: () => client.openPanel("agent-inspector", { workspaceId: agent.workspaceId!, agentId: agent.id }) },
+        behavior: { kind: "action", onPress: () => client.openSurface("observatory") },
       },
     }));
   };
