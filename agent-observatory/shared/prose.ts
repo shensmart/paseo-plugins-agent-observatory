@@ -1,15 +1,57 @@
 /**
  * Light Markdown for agent replies, shared by the result views: headings, paragraphs, block quotes, (nested) bullet and
- * numbered lists, and inline `code`, **bold** and http(s) links. Pure functions, so they are unit-tested without React.
+ * numbered lists, tables, and inline `code`, **bold** and http(s) links. Pure functions, so they are unit-tested without React.
  */
 export type ProseBlock = { kind: "heading"; level: number; text: string } | { kind: "paragraph"; text: string } | { kind: "quote"; text: string }
-  | { kind: "list"; items: Array<{ marker: string; depth: number; text: string }> };
+  | { kind: "list"; items: Array<{ marker: string; depth: number; text: string }> }
+  | { kind: "table"; headers: string[]; rows: string[][] };
 export type ProseToken = { kind: "text"; text: string } | { kind: "code"; text: string } | { kind: "bold"; text: string } | { kind: "link"; text: string; url: string };
 
 // Agent replies are untrusted text: every pattern here is linear in the line or bounded (no nested or overlapping
 // quantifiers that can backtrack over a long run of spaces, brackets or hashes).
 const LIST_ITEM = /^(\s*)([-*+]|\d+[.)])\s+([^\n]*)$/;
 const QUOTE = /^\s{0,3}>\s?([^\n]*)$/;
+const TABLE_DIVIDER = /^:?-{3,}:?$/;
+
+/** Split one Markdown table row while preserving escaped pipes inside a cell. */
+function tableRowOf(line: string): string[] | null {
+  if (!line.includes("|")) return null;
+  let source = line.trim();
+  if (source.startsWith("|")) source = source.slice(1);
+  if (source.endsWith("|") && !source.endsWith("\\|")) source = source.slice(0, -1);
+  const cells: string[] = [];
+  let cell = "";
+  let escaped = false;
+  for (const character of source) {
+    if (escaped) { cell += character; escaped = false; continue; }
+    if (character === "\\") { escaped = true; continue; }
+    if (character === "|") { cells.push(cell.trim()); cell = ""; continue; }
+    cell += character;
+  }
+  if (escaped) cell += "\\";
+  cells.push(cell.trim());
+  return cells.length >= 2 ? cells : null;
+}
+
+function isTableDivider(cells: string[]): boolean {
+  return cells.length >= 2 && cells.every(cell => TABLE_DIVIDER.test(cell.trim()));
+}
+
+function tableAt(lines: string[], index: number): { block: Extract<ProseBlock, { kind: "table" }>; next: number } | null {
+  const headers = tableRowOf(lines[index] ?? ""), divider = tableRowOf(lines[index + 1] ?? "");
+  if (!headers || !divider || !isTableDivider(divider)) return null;
+  const width = Math.max(headers.length, divider.length);
+  const normalize = (cells: string[]) => Array.from({ length: width }, (_, column) => cells[column] ?? "");
+  const rows: string[][] = [];
+  let next = index + 2;
+  while (next < lines.length) {
+    const cells = tableRowOf(lines[next]!);
+    if (!cells) break;
+    rows.push(normalize(cells));
+    next++;
+  }
+  return { block: { kind: "table", headers: normalize(headers), rows }, next };
+}
 /** `## Title ##` → level 2, "Title". A closing run of `#` needs a space before it (`## C#` keeps its `#`). */
 function headingOf(line: string): { level: number; text: string } | null {
   const marks = /^#{1,6}/.exec(line)?.[0].length ?? 0;
@@ -37,9 +79,12 @@ export function proseBlocks(chunk: string): ProseBlock[] {
     if (list) blocks.push(list);
     paragraph = []; quote = []; list = null;
   };
-  for (const raw of chunk.split("\n")) {
-    const line = raw.endsWith("\r") ? raw.slice(0, -1) : raw;
+  const lines = chunk.split("\n").map(raw => raw.endsWith("\r") ? raw.slice(0, -1) : raw);
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index]!;
     if (!line.trim()) { flush(); continue; }
+    const table = tableAt(lines, index);
+    if (table) { flush(); blocks.push(table.block); index = table.next - 1; continue; }
     const heading = headingOf(line), item = LIST_ITEM.exec(line), quoted = QUOTE.exec(line);
     if (heading) { flush(); blocks.push({ kind: "heading", ...heading }); continue; }
     if (item) {

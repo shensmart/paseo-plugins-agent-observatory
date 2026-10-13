@@ -6,12 +6,14 @@ import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View, type La
 /**
  * Paseo-native UI kit. Every plugin in this collection carries an identical copy (plugins install
  * independently), so change all copies together and never fork one plugin's copy.
- * Scales mirror the host app: 4-pt spacing, 12/13/14/16 type, 8 px control radius, 28/32 px controls,
+ * Scales mirror the host app: 4-pt spacing, 11/12/13/15 type, 8 px control radius, 28/32 px controls,
  * regular-weight button text, one primary action per view. Surfaces, text and the primary button come from the
  * host theme; states and categories use the vivid palette below (`hue`, `toneColor`, `hueFor`).
+ * PluginTheme currently exposes host colours but not typography. Regular Text deliberately leaves fontFamily
+ * unset so Paseo/native platform defaults remain in control; this scale only keeps the plugin's fixed sizes compact.
  */
 export const space = { xxs: 2, xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 } as const;
-export const fontSize = { meta: 12, small: 13, body: 14, content: 15, title: 16, heading: 18 } as const;
+export const fontSize = { meta: 11, small: 12, body: 13, content: 14, title: 15, heading: 17 } as const;
 export const radius = { sm: 6, md: 8, lg: 12, full: 999 } as const;
 export const control = { sm: 28, md: 32 } as const;
 export const hairline = Platform.OS === "web" ? 1 : StyleSheet.hairlineWidth;

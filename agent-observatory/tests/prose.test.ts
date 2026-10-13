@@ -12,6 +12,12 @@ test("replies split into headings, paragraphs, nested lists and quotes", () => {
   ]);
 });
 
+test("replies parse GitHub Markdown tables and keep escaped pipes inside cells", () => {
+  assert.deepEqual(proseBlocks("| 项目 | 状态 |\n| --- | :---: |\n| API \\| platform | 正常 |\n| task | 失败 |"), [
+    { kind: "table", headers: ["项目", "状态"], rows: [["API | platform", "正常"], ["task", "失败"]] },
+  ]);
+});
+
 test("inline code, bold and links; Chinese punctuation stays outside a bare link; only http(s) becomes a link", () => {
   assert.deepEqual(proseTokens("修复 MR：https://gitlab.example.com/a/b/-/merge_requests/12。另见 [PR](https://github.com/o/r/pull/34)，`npm test` **通过**，javascript:alert(1)"), [
     { kind: "text", text: "修复 MR：" }, { kind: "link", text: "https://gitlab.example.com/a/b/-/merge_requests/12", url: "https://gitlab.example.com/a/b/-/merge_requests/12" },

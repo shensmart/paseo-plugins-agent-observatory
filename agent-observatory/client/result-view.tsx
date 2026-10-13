@@ -5,7 +5,7 @@ import type { PluginTheme } from "@getpaseo/plugin";
 import { ownTurnRunning, type AgentRecord } from "../shared/model";
 import type { AgentResult } from "../shared/results";
 import { object, string } from "../shared/timeline";
-import { Badge, Banner, Button, EmptyState, MetaLine, Row, Skeleton, Spacer, fontSize, hairline, hue, relativeTime, space, toneColor } from "./kit";
+import { Badge, Banner, Button, EmptyState, MetaLine, Row, Skeleton, Spacer, fontSize, hairline, hue, radius, relativeTime, space, toneColor } from "./kit";
 import { PaneLabel, monoFont } from "./ui";
 import { CodeBlock } from "./timeline-view";
 import { openExternalUrl } from "./open-url";
@@ -13,28 +13,57 @@ import { proseBlocks, proseTokens } from "../shared/prose";
 export interface ResultMessage { text: string; ref: string; at: string | null; completeOrigin?: boolean }
 export type ResultData = AgentResult;
 
-function Inline({ theme, text }: { theme: PluginTheme; text: string }) {
-  return <>{proseTokens(text).map((token, key) => token.kind === "text" ? token.text
-    : token.kind === "code" ? <Text key={key} style={{ fontFamily: monoFont, fontSize: fontSize.small, backgroundColor: theme.colors.surface2 }}>{` ${token.text} `}</Text>
-    : token.kind === "bold" ? <Text key={key} style={{ fontWeight: "600" }}>{token.text}</Text>
-    : <Text key={key} accessibilityRole="link" accessibilityHint="在浏览器打开" onPress={() => { void openExternalUrl(token.url).catch(() => {}); }} style={{ color: hue(theme, "blue", "text"), textDecorationLine: "underline" }}>{token.text}</Text>)}</>;
+function breakableText(text: string): string {
+  return text
+    .replace(/([/\\._:=-])/g, "$1\u200b")
+    .replace(/([A-Za-z0-9]{20})(?=[A-Za-z0-9])/g, "$1\u200b");
+}
+
+function Inline({ theme, text, wrapLongWords = false }: { theme: PluginTheme; text: string; wrapLongWords?: boolean }) {
+  return <>{proseTokens(text).map((token, key) => {
+    const display = wrapLongWords ? breakableText(token.text) : token.text;
+    if (token.kind === "text") return display;
+    if (token.kind === "code") return <Text key={key} style={{ fontFamily: monoFont, fontSize: fontSize.small, backgroundColor: theme.colors.surface2 }}>{` ${display} `}</Text>;
+    if (token.kind === "bold") return <Text key={key} style={{ fontWeight: "600" }}>{display}</Text>;
+    return <Text key={key} accessibilityRole="link" accessibilityHint="在浏览器打开" onPress={() => { void openExternalUrl(token.url).catch(() => {}); }} style={{ color: hue(theme, "blue", "text"), textDecorationLine: "underline" }}>{display}</Text>;
+  })}</>;
+}
+
+function MarkdownTable({ theme, headers, rows }: { theme: PluginTheme; headers: string[]; rows: string[][] }) {
+  const { colors } = theme;
+  const cellStyle = { flex: 1, minWidth: 0, minHeight: 34, justifyContent: "center" as const, paddingHorizontal: space.sm, paddingVertical: space.xs };
+  const cellText = { color: colors.foreground, fontSize: fontSize.small, lineHeight: 18, width: "100%", minWidth: 0, flexShrink: 1 } as const;
+  const headerText = { ...cellText, fontWeight: "600" as const };
+  return <View style={{ width: "100%", borderWidth: hairline, borderColor: colors.border, borderRadius: radius.md, overflow: "hidden" }}>
+      <View style={{ flexDirection: "row", backgroundColor: colors.surface1, borderBottomWidth: hairline, borderBottomColor: colors.border }}>
+        {headers.map((header, column) => <View key={`header:${column}`} style={{ ...cellStyle, borderRightWidth: column === headers.length - 1 ? 0 : hairline, borderRightColor: colors.border }}>
+          <Text selectable style={headerText}><Inline theme={theme} text={header} wrapLongWords /></Text>
+        </View>)}
+      </View>
+      {rows.map((row, rowIndex) => <View key={`row:${rowIndex}`} style={{ flexDirection: "row", borderBottomWidth: rowIndex === rows.length - 1 ? 0 : hairline, borderBottomColor: colors.border }}>
+        {headers.map((_, column) => <View key={`cell:${rowIndex}:${column}`} style={{ ...cellStyle, borderRightWidth: column === headers.length - 1 ? 0 : hairline, borderRightColor: colors.border }}>
+          <Text selectable style={cellText}><Inline theme={theme} text={row[column] ?? ""} wrapLongWords /></Text>
+        </View>)}
+      </View>)}
+  </View>;
 }
 
 /** Selectable native text with light Markdown: headings, lists, quotes, code, bold and links (opened only on tap, http(s) only); nothing is executed. */
 export function OutputText({ theme, text }: { theme: PluginTheme; text: string }) {
   const { colors } = theme;
-  const body = { color: colors.foreground, fontSize: fontSize.content, lineHeight: 24 } as const;
+  const body = { color: colors.foreground, fontSize: fontSize.content, lineHeight: 22 } as const;
   const chunks = text.split(/(```[\s\S]*?```)/g).filter(Boolean);
   return <View style={{ gap: space.md }}>{chunks.map((chunk, index) => {
     if (chunk.startsWith("```")) { const first = chunk.indexOf("\n"); return <CodeBlock key={index} theme={theme} label={chunk.slice(3, first).trim() || "代码"} value={chunk.slice(first + 1, -3)} />; }
     return proseBlocks(chunk).map((block, i) => {
       const key = `${index}:${i}`;
-      if (block.kind === "heading") return <Text selectable key={key} accessibilityRole="header" style={{ color: colors.foreground, fontSize: block.level === 1 ? fontSize.heading : fontSize.title, fontWeight: "600", lineHeight: 26 }}><Inline theme={theme} text={block.text} /></Text>;
+      if (block.kind === "heading") return <Text selectable key={key} accessibilityRole="header" style={{ color: colors.foreground, fontSize: block.level === 1 ? fontSize.heading : fontSize.title, fontWeight: "600", lineHeight: 23 }}><Inline theme={theme} text={block.text} /></Text>;
       if (block.kind === "quote") return <View key={key} style={{ borderLeftWidth: 3, borderLeftColor: colors.border, paddingLeft: space.md }}><Text selectable style={{ ...body, color: colors.foregroundMuted }}><Inline theme={theme} text={block.text} /></Text></View>;
       if (block.kind === "list") return <View key={key} style={{ gap: space.xs }}>{block.items.map((item, n) => <View key={n} style={{ flexDirection: "row", alignItems: "flex-start", gap: space.sm, paddingLeft: item.depth * space.lg }}>
         <Text style={{ ...body, minWidth: item.marker === "•" ? 10 : 18, color: item.marker === "•" ? hue(theme, "blue") : colors.foregroundMuted, fontWeight: "600" }}>{item.marker}</Text>
         <Text selectable style={{ ...body, flexGrow: 1, flexShrink: 1, minWidth: 0 }}><Inline theme={theme} text={item.text} /></Text>
       </View>)}</View>;
+      if (block.kind === "table") return <MarkdownTable key={key} theme={theme} headers={block.headers} rows={block.rows} />;
       return <Text selectable key={key} style={body}><Inline theme={theme} text={block.text} /></Text>;
     });
   })}</View>;
