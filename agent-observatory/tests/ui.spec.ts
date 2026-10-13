@@ -71,12 +71,12 @@ async function snooze(page: Page) {
 }
 const toast = (page: Page, text: string) => page.getByRole("status").getByText(text, { exact: true });
 async function openArchiveView(page: Page) {
-  await page.getByRole("button", { name: "已归档会话", exact: true }).click();
+  await page.getByRole("tab", { name: "已归档会话", exact: true }).click();
   // 归档范围 hides the live status scopes (需要处理 / 执行中 / 未读 / 待回复).
   await expect(page.getByRole("button", { name: /^需要处理/ })).toHaveCount(0);
 }
 async function openCurrentView(page: Page) {
-  await page.getByRole("button", { name: "返回当前会话", exact: true }).click();
+  await page.getByRole("tab", { name: "当前会话", exact: true }).click();
   await expect(page.getByRole("button", { name: /^需要处理/ })).toBeVisible();
 }
 

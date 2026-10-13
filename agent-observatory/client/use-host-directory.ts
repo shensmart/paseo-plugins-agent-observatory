@@ -12,7 +12,6 @@ export interface HostAgent extends AgentRecord {
 }
 export interface HostDirectoryState {
   agents: HostAgent[];
-  unreadByHost: ReadonlyMap<string, number>;
   error: string | null;
 }
 
@@ -47,9 +46,7 @@ export function useHostDirectory() {
         catch { return { host, agents: [], error: true }; }
       }));
       const agents = results.flatMap(result => result.agents).sort((a, b) => Date.parse(b.lastActivityAt || b.updatedAt || b.createdAt || "") - Date.parse(a.lastActivityAt || a.updatedAt || a.createdAt || ""));
-      const unreadByHost = new Map<string, number>();
-      for (const agent of agents) if (agent.requiresAttention === true && agent.attentionReason === "finished") unreadByHost.set(agent.hostId, (unreadByHost.get(agent.hostId) ?? 0) + 1);
-      return { agents, unreadByHost, error: results.some(result => "error" in result) ? "部分主机暂时无法读取" : null } satisfies HostDirectoryState;
+      return { agents, error: results.some(result => "error" in result) ? "部分主机暂时无法读取" : null } satisfies HostDirectoryState;
     },
     enabled: active && hosts.length > 1,
     refetchInterval: active && hosts.length > 1 ? 15_000 : false,

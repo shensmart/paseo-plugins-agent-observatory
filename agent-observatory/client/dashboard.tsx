@@ -36,7 +36,7 @@ import { Swimlane } from "./swimlane";
 import { SessionList, countRunningDescendants, countUnreadDescendants, groupTitles, type SessionItem } from "./session-list";
 import { LiveDot, PhaseLegend, StatusChip, hueColor } from "./status";
 import { FilterSheet, ProjectSheet, RangeSheet, readFilterNames, sessionScopeNames, type FilterState, type SessionScope } from "./filters";
-import { ActionMenu, Banner, Chip, ChipBar, EmptyState, IconButton, SearchField, Sheet, Skeleton, Spacer, SplitView, SyncStatus, Toolbar, fontSize, hueFor, space, useCompactLayout, type MenuAction } from "./kit";
+import { ActionMenu, Banner, Chip, ChipBar, EmptyState, IconButton, SearchField, Segmented, Sheet, Skeleton, Spacer, SplitView, SyncStatus, Toolbar, fontSize, hueFor, space, useCompactLayout, type MenuAction } from "./kit";
 import { checkoutName, statusNames, useClock } from "./ui";
 import type { ScheduleFocus } from "./schedule-focus";
 import { useHostDirectory, type HostAgent } from "./use-host-directory";
@@ -150,13 +150,17 @@ export function DashboardView({ theme, layout, host, navigation, workspaceId, in
   // Analysis sessions the observatory starts itself (智能分析 runners) are reached from their reports, not listed as work.
   const effectiveHostFilter = hostDirectory.hosts.length > 1 ? hostFilter : host.id;
   const localLoadedAgents = useMemo(() => { const receipts = new Map((readReceipts ?? []).map(receipt => [receipt.agentId, receipt])); const origins = new Map((archiveOrigins ?? []).map(origin => [origin.agentId, origin])); return enrichAgents(data.agents.filter(agent => agent.labels["observatory.role"] !== "insight"), telemetry, background).map(agent => applyReadReceipt(applyArchiveReadOrigin(agent, origins.get(agent.id)), receipts.get(agent.id))); }, [data.agents, telemetry, background, readReceipts, archiveOrigins]);
-  const loadedAgents = useMemo(() => {
+  // Every host's agents, before the Host filter: the Host chips count each host's contribution to the same
+  // in-scope set the list and the 未读 scope use, so their numbers always add up to what is actually shown.
+  const loadedAgentsAll = useMemo(() => {
     const merged = (hostDirectory.data?.agents ?? []).filter(agent => agent.hostId !== host.id);
-    const source = effectiveHostFilter === "all" ? [...localLoadedAgents, ...merged]
-      : effectiveHostFilter === host.id ? localLoadedAgents : merged.filter(agent => agent.hostId === effectiveHostFilter);
-    return source.filter(agent => agent.labels["observatory.role"] !== "insight");
-  }, [effectiveHostFilter, host.id, hostDirectory.data?.agents, localLoadedAgents]);
+    return [...localLoadedAgents, ...merged].filter(agent => agent.labels["observatory.role"] !== "insight");
+  }, [host.id, hostDirectory.data?.agents, localLoadedAgents]);
+  const loadedAgents = useMemo(() => effectiveHostFilter === "all" ? loadedAgentsAll
+    : effectiveHostFilter === host.id ? loadedAgentsAll.filter(agent => !(agent as Partial<HostAgent>).hostId)
+    : loadedAgentsAll.filter(agent => (agent as Partial<HostAgent>).hostId === effectiveHostFilter), [effectiveHostFilter, host.id, loadedAgentsAll]);
   const agents = useMemo(() => loadedAgents.filter(agent => archivedView ? !!agent.archivedAt : !agent.archivedAt), [loadedAgents, archivedView]);
+  const agentsAll = useMemo(() => loadedAgentsAll.filter(agent => archivedView ? !!agent.archivedAt : !agent.archivedAt), [loadedAgentsAll, archivedView]);
   // Range, snooze and event-window filters change only at exact boundaries; between them the
   // derived lists keep their identity while displayed relative times still tick with `now`.
   const filterClock = useRef<{ at: number; until: number; agents: AgentRecord[]; range: TimeRange; snoozes: readonly CompletionSnooze[]; events?: TelemetrySnapshot["events"] } | null>(null);
@@ -169,6 +173,7 @@ export function DashboardView({ theme, layout, host, navigation, workspaceId, in
   const ranged = useMemo(() => agents.filter(agent => withinRange(agent, range, filterNow)), [agents, range, filterNow]);
   const inPlace = useCallback((agent: AgentRecord) => (checkout === "all" || checkoutKey(agent) === checkout) && (project === "all" || projectKey(agent) === project) && (!workspaceId || agent.workspaceId === workspaceId) && (workspace === "all" || agent.workspaceId === workspace) && (provider === "all" || agent.provider === provider), [checkout, project, workspaceId, workspace, provider]);
   const harvestScope = useMemo(() => ranged.filter(inPlace), [ranged, inPlace]);
+  const harvestScopeAll = useMemo(() => agentsAll.filter(agent => withinRange(agent, range, filterNow)).filter(inPlace), [agentsAll, range, filterNow, inPlace]);
   const scoped = useMemo(() => harvestScope.filter(agent => sessionScope === "all" || (sessionScope === "history" ? !!agent.archivedAt || finished(agent) : !agent.archivedAt && !finished(agent))), [harvestScope, sessionScope]);
   const projects = useMemo(() => { const found = new Map<string, { id: string; name: string; count: number }>(); for (const agent of ranged) { const key = projectKey(agent); const entry = found.get(key) ?? { id: key, name: agent.projectName, count: 0 }; entry.count++; found.set(key, entry); } return [...found.values()].sort((a, b) => a.name.localeCompare(b.name)); }, [ranged]);
   const workspaces = useMemo(() => {
@@ -181,6 +186,15 @@ export function DashboardView({ theme, layout, host, navigation, workspaceId, in
   const checkouts = useMemo(() => [...new Map(agents.map(a => [checkoutKey(a), checkoutName(a)] as const)).entries()].sort((a, b) => a[1].localeCompare(b[1])), [agents]);
   const providers = useMemo(() => [...new Set(agents.map(a => a.provider))].sort(), [agents]);
   const snoozedAt = useCallback((agent: AgentRecord) => isCompletionSnoozed(agent, snoozes, filterNow), [snoozes, filterNow]);
+  /** Unread results per host, using the same "in scope and not snoozed" rule as the 未读 quick scope. */
+  const unreadByHost = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const agent of harvestScopeAll) if (isUnreadCompletion(agent) && !snoozedAt(agent)) {
+      const hostId = (agent as Partial<HostAgent>).hostId ?? host.id;
+      counts.set(hostId, (counts.get(hostId) ?? 0) + 1);
+    }
+    return counts;
+  }, [harvestScopeAll, snoozedAt, host.id]);
   const attentionOf = useCallback((agent: AgentRecord) => needsAttention(agent, snoozedAt(agent)), [snoozedAt]);
   const counts = useMemo(() => { let attention = 0, approvals = 0, running = 0, unread = 0, snoozed = 0, idle = 0; for (const agent of harvestScope) { if (attentionOf(agent)) attention++; if (!agent.archivedAt && (agent.pendingPermissionCount > 0 || agent.status === "waiting")) approvals++; if (matchesStatus(agent.status, "running")) running++; if (agent.status === "idle" && !agent.archivedAt && !agent.pendingPermissionCount) idle++; if (isUnreadCompletion(agent)) { if (snoozedAt(agent)) snoozed++; else unread++; } } return { attention, approvals, running, unread, snoozed, idle }; }, [harvestScope, attentionOf, snoozedAt]);
   // Search and state filters reveal matching descendants (see buildDashboardRows); place filters keep the tree as is.
@@ -327,10 +341,12 @@ export function DashboardView({ theme, layout, host, navigation, workspaceId, in
   const pushDetail = compact && !!selected && listTab;
   const chrome = !(compact && tab === "insights" && hubPushed);
   return <View onLayout={onLayout} style={{ flex: 1, minHeight: 0, backgroundColor: colors.surface0 }}>
-    {sessionsTab && hostDirectory.hosts.length > 1 ? <HostFilterBar theme={theme} hosts={hostDirectory.hosts} agents={hostDirectory.data?.agents ?? []} unreadByHost={hostDirectory.data?.unreadByHost ?? new Map()} value={effectiveHostFilter} onChange={value => { setHostFilter(value); setSelectedId(null); }} /> : null}
+    {sessionsTab && hostDirectory.hosts.length > 1 ? <HostFilterBar theme={theme} hosts={hostDirectory.hosts} unreadByHost={unreadByHost} value={effectiveHostFilter} onChange={value => { setHostFilter(value); setSelectedId(null); }} /> : null}
     {pushDetail ? detail : <>
       {chrome ? <Toolbar theme={theme}>
         <ViewTabs theme={theme} value={tab} onChange={setTab} tabs={tabs} iconOnly={iconTabs} accessibilityLabel="视图" />
+        {sessionsTab ? <Segmented theme={theme} size="sm" value={viewMode} onChange={switchScope} accessibilityLabel="会话范围"
+          options={[{ value: "current", label: "当前会话", icon: "MessagesSquare" }, { value: "archived", label: "已归档会话", icon: "Archive" }]} /> : null}
         <Spacer />
         {sessionsTab && !compact ? <View style={{ width: 240, flexShrink: 1 }}><SearchField theme={theme} value={query} onChangeText={setQuery} placeholder="搜索任务、项目或分支" accessibilityLabel="搜索会话" /></View> : null}
         {sessionsTab && compact ? <IconButton theme={theme} icon="Search" label="搜索" active={searching} onPress={() => { if (searching) { setQuery(""); setSearchOpen(false); } else setSearchOpen(true); }} /> : null}
@@ -342,8 +358,6 @@ export function DashboardView({ theme, layout, host, navigation, workspaceId, in
       </Toolbar> : null}
       {searching ? <View style={{ paddingHorizontal: space.md, paddingTop: space.sm }}><SearchField theme={theme} value={query} onChangeText={setQuery} placeholder="搜索任务、项目或分支" accessibilityLabel="搜索会话" autoFocus={!query} grow={false} /></View> : null}
       {sessionsTab ? <ChipBar>
-        {archivedView ? <Chip theme={theme} label="返回当前会话" icon="ArrowLeft" onPress={() => switchScope("current")} />
-          : <Chip theme={theme} label="已归档会话" icon="Archive" onPress={() => switchScope("archived")} />}
         {!archivedView ? <>
           <StatusChip theme={theme} label="需要处理" count={known ? counts.attention : undefined} hue="warn" motion={counts.approvals ? "ping" : undefined} selected={focus === "attention"} onPress={() => openScope({ focus: "attention" })} />
           <StatusChip theme={theme} label="执行中" count={known ? counts.running : undefined} hue="run" motion="spin" selected={status === "running"} onPress={() => openScope({ status: "running" })} />
