@@ -45,6 +45,8 @@ import { HostFilterBar } from "./host-filter";
 type DashboardProps = PluginSurfaceProps & { workspaceId?: string; initialAgentId?: string; archiveMode?: boolean; onOpenArchive?: () => void; onOpenOverview?: () => void; data?: ObservatoryData;
   telemetry?: TelemetrySnapshot; telemetryError?: string; background?: BackgroundState; analytics?: AnalyticsSnapshot; analyticsLoading?: boolean; analyticsError?: string;
   readReceipts?: ReadReceipt[]; archiveOrigins?: Array<{ agentId: string; archivedAt: string; lastUserMessageAt: string | null }>; readReceiptError?: string;
+  /** Development preview only: exercises the original archive surface. Never exposed on the real screen. */
+  showScopeSwitch?: boolean;
   /** Opens 定时运行 on one schedule (from an Agent's 定时任务 card). */ onOpenSchedules?: (focus: ScheduleFocus) => void };
 type ScheduleLink = { onOpenSchedules?: (focus: ScheduleFocus) => void };
 export type ObservatoryData = ReturnType<typeof useObservatory>;
@@ -96,7 +98,7 @@ const projectKey = (agent: AgentRecord) => agent.projectId || agent.projectRootP
 const checkoutKey = (agent: AgentRecord) => agent.worktreePath || agent.checkoutKind;
 const finished = (agent: AgentRecord) => ["completed", "closed", "canceled"].includes(agent.status);
 
-export function DashboardView({ theme, layout, host, navigation, workspaceId, initialAgentId, data, telemetry, telemetryError, background, analytics, analyticsLoading, analyticsError, readReceipts, archiveOrigins, readReceiptError, archiveMode = false, onOpenArchive, onOpenOverview, onOpenSchedules, onRefresh, onAnalyticsVisible }: DashboardProps & {
+export function DashboardView({ theme, layout, host, navigation, workspaceId, initialAgentId, data, telemetry, telemetryError, background, analytics, analyticsLoading, analyticsError, readReceipts, archiveOrigins, readReceiptError, archiveMode = false, showScopeSwitch = false, onOpenArchive, onOpenOverview, onOpenSchedules, onRefresh, onAnalyticsVisible }: DashboardProps & {
   data: ObservatoryData; readReceipts?: ReadReceipt[]; archiveOrigins?: Array<{agentId:string;archivedAt:string;lastUserMessageAt:string|null}>; readReceiptError?: string; analytics?: AnalyticsSnapshot; analyticsLoading?: boolean; analyticsError?: string; telemetry?: TelemetrySnapshot; telemetryError?: string;
   /** Provider subagents still working after their parent's turn (后台执行中). */ background?: BackgroundState;
   onRefresh: () => void; onAnalyticsVisible?: (visible: boolean) => void;
@@ -363,8 +365,6 @@ export function DashboardView({ theme, layout, host, navigation, workspaceId, in
     {pushDetail ? detail : <>
       {chrome ? <Toolbar theme={theme}>
         <ViewTabs theme={theme} value={tab} onChange={setTab} tabs={tabs} iconOnly={iconTabs} accessibilityLabel="视图" />
-        {sessionsTab ? <Segmented theme={theme} size="sm" value={viewMode} onChange={switchScope} accessibilityLabel="会话范围"
-          options={[{ value: "current", label: "当前会话", icon: "MessagesSquare" }, { value: "archived", label: "已归档会话", icon: "Archive" }]} /> : null}
         <Spacer />
         {sessionsTab && !compact ? <View style={{ width: 240, flexShrink: 1 }}><SearchField theme={theme} value={query} onChangeText={setQuery} placeholder="搜索任务、项目或分支" accessibilityLabel="搜索会话" /></View> : null}
         {sessionsTab && compact ? <IconButton theme={theme} icon="Search" label="搜索" active={searching} onPress={() => { if (searching) { setQuery(""); setSearchOpen(false); } else setSearchOpen(true); }} /> : null}
@@ -374,6 +374,10 @@ export function DashboardView({ theme, layout, host, navigation, workspaceId, in
         </View> : <SyncStatus theme={theme} state={sync.state} label={compact ? undefined : sync.label} />}</View>
         <IconButton theme={theme} icon="Ellipsis" label="更多操作" onPress={() => setMenuOpen(true)} />
       </Toolbar> : null}
+      {sessionsTab && showScopeSwitch ? <View style={{ paddingHorizontal: space.md, paddingTop: space.sm }}>
+        <Segmented theme={theme} size="sm" value={viewMode} onChange={switchScope} accessibilityLabel="会话范围"
+          options={[{ value: "current", label: "当前会话", icon: "MessagesSquare" }, { value: "archived", label: "已归档会话", icon: "Archive" }]} />
+      </View> : null}
       {searching ? <View style={{ paddingHorizontal: space.md, paddingTop: space.sm }}><SearchField theme={theme} value={query} onChangeText={setQuery} placeholder="搜索任务、项目或分支" accessibilityLabel="搜索会话" autoFocus={!query} grow={false} /></View> : null}
       {sessionsTab ? <ChipBar>
         {!archivedView ? <>

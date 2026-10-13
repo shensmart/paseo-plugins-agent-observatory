@@ -56,7 +56,7 @@ function Preview() {
     <HostBar />
     <div className="plugin-frame">
       <DashboardView key="overview" theme={theme} host={host} navigation={navigation} layout={{ compact: innerWidth < 700, platform: "web" }}
-        data={data} telemetry={fixtureTelemetry} background={scenario === "background" ? fixtureBackground : undefined} analytics={fixtureAnalytics} readReceipts={fixtureReadReceipts} archiveOrigins={fixtureArchiveOrigins} archiveMode={initialArchive} onRefresh={refresh}
+        data={data} telemetry={fixtureTelemetry} background={scenario === "background" ? fixtureBackground : undefined} analytics={fixtureAnalytics} readReceipts={fixtureReadReceipts} archiveOrigins={fixtureArchiveOrigins} archiveMode={initialArchive} showScopeSwitch onRefresh={refresh}
         onOpenSchedules={focus => { focusScheduleRuns(focus); setSurface("schedules"); }} />
     </div>
     <ToastHost />
