@@ -76,7 +76,7 @@ async function openArchiveView(page: Page) {
   await expect(page.getByRole("button", { name: /^需要处理/ })).toHaveCount(0);
 }
 async function openCurrentView(page: Page) {
-  await page.getByRole("tab", { name: "当前打开会话", exact: true }).click();
+  await page.getByRole("tab", { name: "当前会话", exact: true }).click();
   await expect(page.getByRole("button", { name: /^需要处理/ })).toBeVisible();
 }
 
@@ -128,7 +128,7 @@ test("overview quick scopes, status filtering, search, and fixture screenshot", 
   await expect(page.getByRole("button", { name: "未读 1", exact: true })).toBeVisible();
   // The first session is on screen right under the toolbar and chips.
   const first = await page.getByRole("button", { name: "查看 审查数据库迁移，待审批", exact: true }).boundingBox();
-  // The merged observatory keeps the scope switch above the original toolbar/list chrome.
+  // The scope switch now sits in the same toolbar row as the original view tabs.
   expect(first!.y).toBeLessThan(40 + 220);
   await noHorizontalOverflow(page);
   await screenshot(page, testInfo, "overview");
@@ -504,9 +504,11 @@ test("search text stays on this device: an old synced query is ignored, typing i
   const box = page.getByRole("textbox", { name: "搜索会话", exact: true });
   if (await box.count()) await expect(box).toHaveValue("");
   await search(page, "重构支付服务");
+  await expect(page.getByRole("textbox", { name: "搜索会话", exact: true })).toHaveValue("重构支付服务");
   await expect(page.getByRole("button", { name: /^查看 检查发布流水线，/ })).toHaveCount(0);
-  await openArchiveView(page);
-  await openCurrentView(page);
+  await page.getByRole("tab", { name: "已归档会话", exact: true }).click();
+  await page.getByRole("tab", { name: "当前会话", exact: true }).click();
+  // Switching scope flushes the original page state to preferences without saving search text.
   await expect(page.getByRole("textbox", { name: "搜索会话", exact: true })).toHaveValue("重构支付服务");
   await expect(page.getByRole("button", { name: /^查看 重构支付服务，/ })).toBeVisible();
   const saves = await rpcCalls(page, "observatory.preferences.update");

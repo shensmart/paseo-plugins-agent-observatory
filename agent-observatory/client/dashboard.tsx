@@ -36,7 +36,7 @@ import { Swimlane } from "./swimlane";
 import { SessionList, countRunningDescendants, countUnreadDescendants, groupTitles, type SessionItem } from "./session-list";
 import { LiveDot, PhaseLegend, StatusChip, hueColor } from "./status";
 import { FilterSheet, ProjectSheet, RangeSheet, readFilterNames, sessionScopeNames, type FilterState, type SessionScope } from "./filters";
-import { ActionMenu, Banner, Chip, ChipBar, EmptyState, IconButton, SearchField, Segmented, Sheet, Skeleton, Spacer, SplitView, SyncStatus, Toolbar, fontSize, hairline, hueFor, space, useCompactLayout, type MenuAction } from "./kit";
+import { ActionMenu, Banner, Chip, ChipBar, EmptyState, IconButton, SearchField, Segmented, Sheet, Skeleton, Spacer, SplitView, SyncStatus, Toolbar, fontSize, hueFor, space, useCompactLayout, type MenuAction } from "./kit";
 import { checkoutName, statusNames, useClock } from "./ui";
 import type { ScheduleFocus } from "./schedule-focus";
 import { useHostDirectory, type HostAgent } from "./use-host-directory";
@@ -61,7 +61,7 @@ const sessionQueries = new Map<string, string>();
 export function DashboardSurface(props: DashboardProps) {
   // Preview fixtures can provide a complete directory snapshot. Keep the real hook alive for
   // production surfaces, but let the injected snapshot drive the rendered view when present.
-  const fetchedData = useObservatory({ includeArchived: props.archiveMode === true });
+  const fetchedData = useObservatory({ includeArchived: true });
   const data = props.data ?? fetchedData;
   const [observing, setObserving] = useState(false);
   const telemetry = useTelemetry(props.host.id);
@@ -92,20 +92,6 @@ export function ArchivedSurface(props: DashboardProps) { return <DashboardSurfac
 export function WorkspaceDashboard(props: PluginWorkspacePanelProps & ScheduleLink) { return <DashboardSurface {...props} />; }
 export function AgentDashboard(props: PluginAgentPanelProps & ScheduleLink) { return <DashboardSurface {...props} initialAgentId={props.agentId} />; }
 
-/** One observatory surface with the original full archive page behind the top scope switch. */
-export function ObservatoryHub(props: DashboardProps) {
-  const [scope, setScope] = useState<"current" | "archived">(props.archiveMode ? "archived" : "current");
-  return <View style={{ flex: 1, minHeight: 0 }}>
-    <View style={{ minHeight: 46, paddingHorizontal: space.lg, justifyContent: "center", alignItems: "flex-end", borderBottomWidth: hairline, borderBottomColor: props.theme.colors.border }}>
-      <Segmented theme={props.theme} size="sm" value={scope} onChange={setScope} accessibilityLabel="会话范围"
-        options={[{ value: "current", label: "当前打开会话", icon: "MessagesSquare" }, { value: "archived", label: "已归档会话", icon: "Archive" }]} />
-    </View>
-    {scope === "current"
-      ? <DashboardSurface key="current" {...props} archiveMode={false} onOpenArchive={() => setScope("archived")} />
-      : <ArchivedSurface key="archived" {...props} archiveMode onOpenOverview={() => setScope("current")} />}
-  </View>;
-}
-
 const projectKey = (agent: AgentRecord) => agent.projectId || agent.projectRootPath || agent.projectName;
 const checkoutKey = (agent: AgentRecord) => agent.worktreePath || agent.checkoutKind;
 const finished = (agent: AgentRecord) => ["completed", "closed", "canceled"].includes(agent.status);
@@ -118,7 +104,9 @@ export function DashboardView({ theme, layout, host, navigation, workspaceId, in
   const { colors } = theme;
   const { compact, width: surfaceWidth, onLayout } = useCompactLayout(layout.compact);
   const toast = useToast();
-  const viewStorageKey = `${host.id}:${workspaceId ?? "global"}:${archiveMode ? "archives" : "overview"}`;
+  const [viewMode, setViewMode] = useState<"current" | "archived">(archiveMode ? "archived" : "current");
+  const archivedView = viewMode === "archived";
+  const viewStorageKey = `${host.id}:${workspaceId ?? "global"}:${archivedView ? "archives" : "overview"}`;
   const preferences = useViewPreferences(viewStorageKey);
   const hydrated = useRef(false);
   const list = useRef<NativeFlatList<SessionItem>>(null);
@@ -154,34 +142,32 @@ export function DashboardView({ theme, layout, host, navigation, workspaceId, in
   const now = useClock(30_000);
   const observing = tab === "analytics" && dimension === "observed";
   // Statistics are read only while 看板 / 明细 / 横评 show them.
-  const statsTab = !archiveMode && (tab === "board" || tab === "compare" || (tab === "analytics" && !observing));
+  const statsTab = !archivedView && (tab === "board" || tab === "compare" || (tab === "analytics" && !observing));
   const stats = useStats(host.id, statsRange, statsTab);
   const [liveWindow, setLiveWindow] = useState<30 | 60>(30);
-  const tokenTab = !archiveMode && tab === "tokens";
+  const tokenTab = !archivedView && tab === "tokens";
   // 看板 shows today's tokens as a shortcut into the Token view.
-  const tokens = useTokens(host.id, statsRange, tokenTab || (!archiveMode && tab === "board")), tokenLive = useTokenLive(host.id, tokenTab, "full", liveWindow);
+  const tokens = useTokens(host.id, statsRange, tokenTab || (!archivedView && tab === "board")), tokenLive = useTokenLive(host.id, tokenTab, "full", liveWindow);
   // Running rows show their live output speed; read only while the session list shows something running.
   const runningCount = useMemo(() => data.agents.filter(agent => agent.status === "running" && !agent.archivedAt).length + (background?.agents.length ?? 0), [data.agents, background]);
-  const rowLive = useTokenLive(host.id, !archiveMode && tab === "agents" && runningCount > 0, "agents");
+  const rowLive = useTokenLive(host.id, !archivedView && tab === "agents" && runningCount > 0, "agents");
   const rates = useMemo(() => new Map((rowLive.data?.agents ?? []).flatMap(agent => agent.agentId && agent.outputPerSec > 0 ? [[agent.agentId, agent.outputPerSec] as const] : [])), [rowLive.data]);
   useEffect(() => { setWorkspace(workspaceId ?? "all"); }, [workspaceId]);
   useEffect(() => { onAnalyticsVisible?.(observing); }, [observing, onAnalyticsVisible]);
   const syncedView: ViewPreferences = useMemo(() => ({ query: "", status, readFilter, workspace, project, checkout, provider, range, sessionScope, view, sort, expanded: [...expanded], scrollOffset: 0, focus }), [status, readFilter, workspace, project, checkout, provider, range, sessionScope, view, sort, expanded, focus]);
   const currentView: ViewPreferences = useMemo(() => ({ ...syncedView, query }), [syncedView, query]);
-  const latestView = useRef(syncedView);
-  latestView.current = syncedView;
   const withScroll = (next: ViewPreferences): ViewPreferences => ({ ...next, scrollOffset: Math.round(scrollOffset.current) });
   const applyView = (next: ViewPreferences, restoreScroll = false) => { setQuery(next.query); setStatus(next.status); setReadFilter(next.readFilter); setWorkspace(workspaceId ?? next.workspace); setProject(next.project); setCheckout(next.checkout); setProvider(next.provider); setRange(next.range); setSessionScope(next.sessionScope); setView(next.view); setSort(next.sort); setExpanded(new Set(next.expanded)); setFocus(next.focus ?? "all"); pendingScroll.current = restoreScroll ? next.scrollOffset : 0; };
   useEffect(() => { hydrated.current = false; }, [viewStorageKey]);
   useEffect(() => { if (!preferences.snapshot || hydrated.current) return; applyView({ ...preferences.snapshot.view, query: sessionQueries.get(viewStorageKey) ?? "" }, Date.now() - returningAt < 300_000); hydrated.current = true; }, [preferences.snapshot]);
   useEffect(() => { if (!hydrated.current) return; if (query) sessionQueries.set(viewStorageKey, query); else sessionQueries.delete(viewStorageKey); }, [query, viewStorageKey]);
   useEffect(() => { if (!hydrated.current) return; const timer = setTimeout(() => { void preferences.saveView(withScroll(syncedView)).catch(() => {}); }, 650); return () => clearTimeout(timer); }, [syncedView, preferences.saveView]);
-  // Switching the top scope unmounts the old page. Flush its view before the original
-  // archive page mounts, while keeping the device-only search text out of preferences.
-  useEffect(() => () => {
-    if (scrollSave.current) clearTimeout(scrollSave.current);
-    if (hydrated.current) void preferences.saveView(withScroll(latestView.current)).catch(() => {});
-  }, [preferences.saveView]);
+  // The original archive page's navigation restored list state. Reuse that path when the
+  // toolbar switch changes scope, while keeping search text on this device.
+  const switchScope = (next: "current" | "archived") => {
+    if (next === viewMode || !hydrated.current) return setViewMode(next);
+    navigatePage(() => setViewMode(next));
+  };
   const snoozes = preferences.snapshot?.snoozes ?? noSnoozes;
   // Analysis sessions the observatory starts itself (智能分析 runners) are reached from their reports, not listed as work.
   const effectiveHostFilter = hostDirectory.hosts.length > 1 ? hostFilter : host.id;
@@ -195,8 +181,8 @@ export function DashboardView({ theme, layout, host, navigation, workspaceId, in
   const loadedAgents = useMemo(() => effectiveHostFilter === "all" ? loadedAgentsAll
     : effectiveHostFilter === host.id ? loadedAgentsAll.filter(agent => !(agent as Partial<HostAgent>).hostId)
     : loadedAgentsAll.filter(agent => (agent as Partial<HostAgent>).hostId === effectiveHostFilter), [effectiveHostFilter, host.id, loadedAgentsAll]);
-  const agents = useMemo(() => loadedAgents.filter(agent => archiveMode ? !!agent.archivedAt : !agent.archivedAt), [loadedAgents, archiveMode]);
-  const agentsAll = useMemo(() => loadedAgentsAll.filter(agent => archiveMode ? !!agent.archivedAt : !agent.archivedAt), [loadedAgentsAll, archiveMode]);
+  const agents = useMemo(() => loadedAgents.filter(agent => archivedView ? !!agent.archivedAt : !agent.archivedAt), [loadedAgents, archivedView]);
+  const agentsAll = useMemo(() => loadedAgentsAll.filter(agent => archivedView ? !!agent.archivedAt : !agent.archivedAt), [loadedAgentsAll, archivedView]);
   // Range, snooze and event-window filters change only at exact boundaries; between them the
   // derived lists keep their identity while displayed relative times still tick with `now`.
   const filterClock = useRef<{ at: number; until: number; agents: AgentRecord[]; range: TimeRange; snoozes: readonly CompletionSnooze[]; events?: TelemetrySnapshot["events"] } | null>(null);
@@ -238,7 +224,7 @@ export function DashboardView({ theme, layout, host, navigation, workspaceId, in
   const filtered = revealing || workspace !== (workspaceId ?? "all") || project !== "all" || checkout !== "all" || provider !== "all" || sessionScope !== "all";
   const { rows } = useMemo(() => buildDashboardRows(scoped.filter(agent => readFilter !== "unread" || showSnoozed || !snoozedAt(agent)), { query, status, view, sort, expanded, readFilter, focus: focus === "attention" ? attentionOf : undefined }), [scoped, query, status, view, sort, expanded, readFilter, showSnoozed, snoozedAt, focus, attentionOf]);
   const items = useMemo(() => {
-    const grouped = sort === "attention" && !archiveMode;
+    const grouped = sort === "attention" && !archivedView;
     const sections = grouped ? groupDashboardRows(rows, attentionOf) : [{ group: "recent" as const, rows, threads: 0 }];
     const result: SessionItem[] = [];
     for (const section of sections) {
@@ -246,7 +232,7 @@ export function DashboardView({ theme, layout, host, navigation, workspaceId, in
       for (const row of section.rows) result.push({ kind: "row", key: row.node.agent.id, row, childUnread: row.node.children.length ? countUnreadDescendants(row) : 0, childRunning: row.node.children.length ? countRunningDescendants(row) : 0, snoozed: isUnreadCompletion(row.node.agent) && snoozedAt(row.node.agent) });
     }
     return result;
-  }, [rows, sort, archiveMode, attentionOf, snoozedAt]);
+  }, [rows, sort, archivedView, attentionOf, snoozedAt]);
   useEffect(() => { if (pendingScroll.current === null || !items.length) return; const offset = pendingScroll.current; pendingScroll.current = null; scrollOffset.current = offset; if (offset > 0) setTimeout(() => list.current?.scrollToOffset({ offset, animated: false }), 0); }, [items.length]);
   const selected = selectedId ? agents.find(agent => agent.id === selectedId) : undefined;
   const scopeIds = useMemo(() => new Set(scoped.filter(agent => matchesStatus(agent.status, status) && (readFilter === "all" || completionReadState(agent) === readFilter) && (focus === "all" || attentionOf(agent))).map(a => a.id)), [scoped, status, readFilter, focus, attentionOf]);
@@ -344,10 +330,9 @@ export function DashboardView({ theme, layout, host, navigation, workspaceId, in
     : readFilter === "unread" && !query.trim() ? <EmptyState theme={theme} icon="Inbox" title={counts.snoozed && !showSnoozed ? "未读结果都已稍后处理" : "没有未读结果"} message="新一轮任务完成后会出现在这里" action={{ label: "查看全部", onPress: resetFilters }} />
     : focus === "attention" && !query.trim() ? <EmptyState theme={theme} icon="Inbox" title="没有需要处理的会话" message="新的审批、异常和未读结果会出现在这里" action={{ label: "查看全部", onPress: resetFilters }} />
     : filtered ? <EmptyState theme={theme} icon="SearchX" title="没有匹配的会话" action={{ label: "清除筛选", onPress: resetFilters }} />
-    : archiveMode ? <EmptyState theme={theme} icon="Archive" title={hostDirectory.hosts.length > 1 ? "这台主机在这个时间范围没有归档会话" : "这个时间范围没有归档会话"} action={range !== "all" ? { label: "查看全部时间", onPress: () => setRange("all") } : undefined} />
+    : archivedView ? <EmptyState theme={theme} icon="Archive" title={hostDirectory.hosts.length > 1 ? "这台主机在这个时间范围没有归档会话" : "这个时间范围没有归档会话"} action={range !== "all" ? { label: "查看全部时间", onPress: () => setRange("all") } : undefined} />
     : <EmptyState theme={theme} icon="Orbit" title="还没有会话" message="在 Paseo 新建 Agent 后会自动出现在这里" />;
   const menu: MenuAction[] = [
-    ...(archiveMode ? onOpenOverview ? [{ key: "overview", label: "返回当前会话", icon: "ArrowLeft", onPress: () => navigatePage(onOpenOverview) }] : [] : onOpenArchive ? [{ key: "archives", label: "打开已归档会话", icon: "Archive", onPress: () => navigatePage(onOpenArchive) }] : []),
     ...(sessionsTab ? [
       { key: "view", label: view === "tree" ? "切换为列表" : "切换为树状", icon: view === "tree" ? "List" : "ListTree", hint: view === "tree" ? "子 Agent 与上级分开显示" : "子 Agent 收在上级下面", onPress: () => setView(view === "tree" ? "list" : "tree") },
       { key: "sort", label: sort === "attention" ? "按最近活动排序" : "按需要处理排序", icon: "ArrowDownWideNarrow", onPress: () => setSort(sort === "attention" ? "recent" : "attention") },
@@ -378,6 +363,8 @@ export function DashboardView({ theme, layout, host, navigation, workspaceId, in
     {pushDetail ? detail : <>
       {chrome ? <Toolbar theme={theme}>
         <ViewTabs theme={theme} value={tab} onChange={setTab} tabs={tabs} iconOnly={iconTabs} accessibilityLabel="视图" />
+        {sessionsTab ? <Segmented theme={theme} size="sm" value={viewMode} onChange={switchScope} accessibilityLabel="会话范围"
+          options={[{ value: "current", label: "当前会话", icon: "MessagesSquare" }, { value: "archived", label: "已归档会话", icon: "Archive" }]} /> : null}
         <Spacer />
         {sessionsTab && !compact ? <View style={{ width: 240, flexShrink: 1 }}><SearchField theme={theme} value={query} onChangeText={setQuery} placeholder="搜索任务、项目或分支" accessibilityLabel="搜索会话" /></View> : null}
         {sessionsTab && compact ? <IconButton theme={theme} icon="Search" label="搜索" active={searching} onPress={() => { if (searching) { setQuery(""); setSearchOpen(false); } else setSearchOpen(true); }} /> : null}
@@ -389,7 +376,7 @@ export function DashboardView({ theme, layout, host, navigation, workspaceId, in
       </Toolbar> : null}
       {searching ? <View style={{ paddingHorizontal: space.md, paddingTop: space.sm }}><SearchField theme={theme} value={query} onChangeText={setQuery} placeholder="搜索任务、项目或分支" accessibilityLabel="搜索会话" autoFocus={!query} grow={false} /></View> : null}
       {sessionsTab ? <ChipBar>
-        {!archiveMode ? <>
+        {!archivedView ? <>
           <StatusChip theme={theme} label="需要处理" count={known ? counts.attention : undefined} hue="warn" motion={counts.approvals ? "ping" : undefined} selected={focus === "attention"} onPress={() => openScope({ focus: "attention" })} />
           <StatusChip theme={theme} label="执行中" count={known ? counts.running : undefined} hue="run" motion="spin" selected={status === "running"} onPress={() => openScope({ status: "running" })} />
           <StatusChip theme={theme} label="未读" count={known ? counts.unread : undefined} hue="pink" motion={counts.unread ? "ping" : undefined} selected={readFilter === "unread" && !showSnoozed} onPress={() => openScope({ readFilter: "unread" })} />
@@ -399,7 +386,7 @@ export function DashboardView({ theme, layout, host, navigation, workspaceId, in
         <Chip theme={theme} label={projectLabel} icon="Folder" tone={project !== "all" ? hueFor(projectLabel) : undefined} selected={project !== "all"} onPress={() => setSheet("project")} />
         <Chip theme={theme} label={rangeLabels[range]} icon="Calendar" selected={range !== "7d"} onPress={() => setSheet("range")} />
         <Chip theme={theme} label="筛选" icon="SlidersHorizontal" count={applied.length || undefined} selected={applied.length > 0} onPress={() => setSheet("filters")} />
-        {!archiveMode ? <Chip theme={theme} label="图例" icon="Palette" tone="violet" onPress={() => setLegendOpen(true)} /> : null}
+        {!archivedView ? <Chip theme={theme} label="图例" icon="Palette" tone="violet" onPress={() => setLegendOpen(true)} /> : null}
         {applied.map(item => <Chip key={item.key} theme={theme} label={item.label} selected onRemove={item.clear} />)}
         {savedViews.map(saved => <Chip key={saved.id} theme={theme} label={saved.name} icon="Bookmark" onPress={() => applyView(saved.view)} />)}
       </ChipBar> : null}
@@ -422,7 +409,7 @@ export function DashboardView({ theme, layout, host, navigation, workspaceId, in
     <Sheet title="状态图例" open={legendOpen} onClose={() => setLegendOpen(false)}><PhaseLegend theme={theme} /></Sheet>
     <ProjectSheet theme={theme} open={sheet === "project"} onClose={() => setSheet(null)} projects={projects} total={ranged.length} value={project} onChange={value => { setProject(value); setWorkspace(workspaceDefault); setCheckout("all"); }} />
     <RangeSheet theme={theme} open={sheet === "range"} onClose={() => setSheet(null)} value={range} onChange={setRange} />
-    <FilterSheet theme={theme} open={sheet === "filters"} onClose={() => setSheet(null)} archiveMode={archiveMode} state={filterState} checkouts={checkouts} workspaces={workspaces} providers={providers} showWorkspace={!workspaceId}
+    <FilterSheet theme={theme} open={sheet === "filters"} onClose={() => setSheet(null)} archiveMode={archivedView} state={filterState} checkouts={checkouts} workspaces={workspaces} providers={providers} showWorkspace={!workspaceId}
       onChange={changeFilters} onReset={resetFilters} savedViews={savedViews} canSave={preferences.ready}
       onSaveView={name => preferences.mutate({ saveView: { name, view: withScroll(currentView) } }).then(() => { toast.show("已保存视图", { variant: "success" }); })}
       onApplyView={saved => applyView(saved.view)} onDeleteView={saved => { void preferences.mutate({ deleteSavedViewId: saved.id }).catch(() => {}); }} />
