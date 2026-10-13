@@ -14,13 +14,15 @@ const ranges = /^(24 小时|最近 7 天|最近 30 天|全部时间)$/;
 const projects = /^(全部项目|Commerce Platform|Delivery Systems|Mobile Experience|Growth Studio)$/;
 
 function query(testInfo: TestInfo, scenario = "all") {
-  return `/?theme=${testInfo.project.name === "desktop-light" ? "light" : "dark"}&scenario=${scenario === "archives" ? "all&archives=1" : scenario}`;
+  return `/?theme=${testInfo.project.name === "desktop-light" ? "light" : "dark"}&scenario=${scenario === "archives" ? "all" : scenario}`;
 }
 const compact = (page: Page) => page.viewportSize()!.width < 760;
 async function open(page: Page, testInfo: TestInfo, scenario = "all") {
   await page.goto(query(testInfo, scenario));
   // The host owns the surface title; the plugin's own toolbar is the readiness signal.
   await expect(page.getByRole("button", { name: "更多操作", exact: true }).first()).toBeVisible();
+  // Archives are no longer a separate page: open the merged observatory and switch the scope.
+  if (scenario === "archives") await openArchiveView(page);
 }
 async function menu(page: Page, action: string) {
   await page.getByRole("button", { name: "更多操作", exact: true }).first().click();
@@ -68,6 +70,16 @@ async function snooze(page: Page) {
   if (compact(page)) await detailMenu(page, "稍后处理"); else await page.getByTestId("agent-detail").getByRole("button", { name: "稍后处理", exact: true }).click();
 }
 const toast = (page: Page, text: string) => page.getByRole("status").getByText(text, { exact: true });
+async function openArchiveView(page: Page) {
+  await page.getByRole("button", { name: "已归档会话", exact: true }).click();
+  // 归档范围 hides the live status scopes (需要处理 / 执行中 / 未读 / 待回复).
+  await expect(page.getByRole("button", { name: /^需要处理/ })).toHaveCount(0);
+}
+async function openCurrentView(page: Page) {
+  await page.getByRole("button", { name: "返回当前会话", exact: true }).click();
+  await expect(page.getByRole("button", { name: /^需要处理/ })).toBeVisible();
+}
+
 /** 智能分析 opens on 总览 (2.7); reports and 新建分析 are one tab away. */
 async function reportsView(page: Page) { await page.getByRole("tablist", { name: "智能分析视图", exact: true }).getByRole("tab", { name: /^报告/ }).click(); }
 const rpcCalls = (page: Page, name: string) => page.evaluate(target => (globalThis as Fixture).__previewRpcCalls.filter(call => call.name === target).map(call => call.input as Record<string, unknown>), name);
@@ -477,11 +489,10 @@ test("normal history excludes archives even in all-time view and opens the separ
   await selectRange(page, "全部时间");
   await expect(page.getByRole("button", { name: "查看 上周版本报告，已关闭", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "查看 十二天前的归档迭代，已完成", exact: true })).toHaveCount(0);
-  await menu(page, "已归档会话");
-  await expect(page.getByText(/^1 个会话 · 1 个项目$/)).toBeVisible();
+  await openArchiveView(page);
   await expect(page.getByRole("button", { name: "查看 上周版本报告，已关闭", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: /^查看 重构支付服务，/ })).toHaveCount(0);
-  await menu(page, "返回观测台");
+  await openCurrentView(page);
   await expect(page.getByRole("button", { name: /^需要处理/ })).toBeVisible();
   await expect(page.getByRole("button", { name: "查看 上周版本报告，已关闭", exact: true })).toHaveCount(0);
 });
@@ -493,8 +504,8 @@ test("search text stays on this device: an old synced query is ignored, typing i
   if (await box.count()) await expect(box).toHaveValue("");
   await search(page, "重构支付服务");
   await expect(page.getByRole("button", { name: /^查看 检查发布流水线，/ })).toHaveCount(0);
-  await menu(page, "已归档会话");
-  await menu(page, "返回观测台");
+  await openArchiveView(page);
+  await openCurrentView(page);
   await expect(page.getByRole("textbox", { name: "搜索会话", exact: true })).toHaveValue("重构支付服务");
   await expect(page.getByRole("button", { name: /^查看 重构支付服务，/ })).toBeVisible();
   const saves = await rpcCalls(page, "observatory.preferences.update");
@@ -545,10 +556,9 @@ test("renamed project badges and historical restoration preserve the original Ag
   await expect(current).toBeVisible();
   await expect(current.getByText(/^Growth Studio · main · /)).toBeVisible();
   await expect(current.getByText(/legacy-growth-engine/)).toHaveCount(0);
-  await menu(page, "已归档会话");
+  await openArchiveView(page);
   await selectRange(page, "最近 30 天");
   await selectProject(page, "Growth Studio");
-  await expect(page.getByText(/^1 个会话 · 1 个项目$/)).toBeVisible();
   await page.getByRole("button", { name: "查看 十二天前的归档迭代，已完成", exact: true }).click();
   const detail = page.getByTestId("agent-detail");
   await expect(detail.getByLabel("项目 Growth Studio", { exact: true })).toBeVisible();
@@ -716,7 +726,7 @@ test("failed acknowledgement preserves unread highlighting and archives never en
   await expect(page.getByRole("button", { name: "未读 2", exact: true })).toBeVisible();
   await page.evaluate(() => (globalThis as Fixture).__previewUpdateAgent("archived-cycle", { requiresAttention: true }));
   await expect(page.getByRole("button", { name: "未读 2", exact: true })).toBeVisible();
-  await menu(page, "已归档会话");
+  await openArchiveView(page);
   await expect(page.getByRole("button", { name: /^未读/ })).toHaveCount(0);
   await selectRange(page, "全部时间");
   await expect(page.getByRole("button", { name: "查看 十二天前的归档迭代，已完成", exact: true })).toBeVisible();
@@ -802,10 +812,10 @@ test("filter sheet keeps the page usable and named views survive archive navigat
   await page.getByRole("button", { name: "支付工作树", exact: true }).click();
   await expect(page.getByRole("button", { name: "查看 重构支付服务，执行中", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "查看 检查发布流水线，异常", exact: true })).toHaveCount(0);
-  await menu(page, "已归档会话");
+  await openArchiveView(page);
   await expect(page.getByRole("button", { name: "支付工作树", exact: true })).toHaveCount(0);
   await selectRange(page, "全部时间");
-  await menu(page, "返回观测台");
+  await openCurrentView(page);
   await expect(page.getByRole("button", { name: "查看 重构支付服务，执行中", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "查看 检查发布流水线，异常", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "最近 7 天", exact: true })).toBeVisible();
@@ -859,7 +869,7 @@ test("acknowledged results can be archived under the original Agent identity", a
   await detail.getByRole("button", { name: "归档", exact: true }).click();
   await expect(detail).toHaveCount(0);
   await expect(page.getByRole("button", { name: "查看 整理性能基线，已完成", exact: true })).toHaveCount(0);
-  await menu(page, "已归档会话");
+  await openArchiveView(page);
   await expect(page.getByRole("button", { name: "查看 整理性能基线，已完成", exact: true })).toBeVisible();
   const operations = await page.evaluate(() => (globalThis as Fixture).__previewAgentOperations);
   expect(operations).toEqual([{ type: "archive", agentId: "performance-baseline" }]);

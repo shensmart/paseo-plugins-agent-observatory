@@ -33,13 +33,15 @@ function HostBar({ archiveMode, schedules }) {
 
 function Preview() {
   useSyncExternalStore(subscribeFixtureChanges, getFixtureRevision, getFixtureRevision);
-  const [archiveMode, setArchiveMode] = useState(search.get("archives") === "1");
+  const initialArchive = search.get("archives") === "1";
   // ?surface=schedules opens 定时运行; an Agent's 「查看全部运行」 switches here like the host's openSurface.
   const [surface, setSurface] = useState(search.get("surface") === "schedules" ? "schedules" : "dashboard");
   const [lastSyncedAt, setLastSyncedAt] = useState(new Date(Date.now() - (scenario === "stale" ? 60_000 : 0)).toISOString());
   const empty = scenario === "empty" || scenario === "loading" || scenario === "error" || scenario === "navigation-error";
   const refresh = async () => setLastSyncedAt(new Date().toISOString());
-  const data = { agents: empty ? [] : fixtureAgents(archiveMode), loading: scenario === "loading",
+  // Archives are merged into the observatory now; the preview always supplies the full set and the
+  // in-page 当前/已归档 scope switch decides what is visible.
+  const data = { agents: empty ? [] : fixtureAgents(true), loading: scenario === "loading",
     error: scenario === "error" || scenario === "retained-error" ? "模拟连接中断，请稍后重试" : null,
     lastSyncedAt, isRefreshing: false, truncated: scenario === "truncated", live: !["stale", "loading", "error", "retained-error"].includes(scenario), refresh };
   const host = { id: "fixture-host", label: "Local development" };
@@ -51,10 +53,10 @@ function Preview() {
     <ToastHost />
   </QueryClientProvider>;
   return <QueryClientProvider client={client}>
-    <HostBar archiveMode={archiveMode} />
+    <HostBar />
     <div className="plugin-frame">
-      <DashboardView key={archiveMode ? "archives" : "overview"} theme={theme} host={host} navigation={navigation} layout={{ compact: innerWidth < 700, platform: "web" }}
-        data={data} telemetry={fixtureTelemetry} background={scenario === "background" ? fixtureBackground : undefined} analytics={fixtureAnalytics} readReceipts={fixtureReadReceipts} archiveOrigins={fixtureArchiveOrigins} archiveMode={archiveMode} onOpenArchive={() => setArchiveMode(true)} onOpenOverview={() => setArchiveMode(false)} onRefresh={refresh}
+      <DashboardView key="overview" theme={theme} host={host} navigation={navigation} layout={{ compact: innerWidth < 700, platform: "web" }}
+        data={data} telemetry={fixtureTelemetry} background={scenario === "background" ? fixtureBackground : undefined} analytics={fixtureAnalytics} readReceipts={fixtureReadReceipts} archiveOrigins={fixtureArchiveOrigins} archiveMode={initialArchive} onRefresh={refresh}
         onOpenSchedules={focus => { focusScheduleRuns(focus); setSurface("schedules"); }} />
     </div>
     <ToastHost />

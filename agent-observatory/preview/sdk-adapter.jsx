@@ -46,6 +46,12 @@ const sdk = {
 sdk.config = { get: async () => ({ requestId: "fixture-config", config: { agentProfiles: fixtureProfiles } }) };
 sdk.workspaces = { ref: workspaceId => ({ agents: { create: async input => { globalThis.__previewAgentOperations.push({ type: "create", workspaceId, input }); return { id: `fixture-created-${++createdSequence}` }; } } }) };
 export function usePaseo() { return sdk; }
+/**
+ * The preview runs on one synthetic host. Keep the same shapes the real host supplies so pages that
+ * read a cross-host directory (会话 Host 筛选) degrade to a single host without crashing.
+ */
+export function useHosts() { return [{ serverId: "preview-host", label: "开发预览", status: "online" }]; }
+export function getPaseoClient() { return sdk; }
 export function useRpc(contract) {
   return useMemo(() => async input => {
     globalThis.__previewRpcCalls.push({ name: contract.name, input: { ...input } });

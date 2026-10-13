@@ -23,7 +23,7 @@ async function fetchHostAgents(host: ReturnType<typeof useHosts>[number]): Promi
   let cursor: string | undefined;
   do {
     const page = await paseo.agents.list({
-      filter: { includeArchived: false }, sort: [{ key: "updated_at", direction: "desc" }],
+      filter: { includeArchived: true }, sort: [{ key: "updated_at", direction: "desc" }],
       page: { limit: 200, ...(cursor ? { cursor } : {}) }, timeout: 8000,
     });
     entries.push(...page.entries as Array<{ agent: AgentSource; project?: AgentProjectPlacement | null }>);
