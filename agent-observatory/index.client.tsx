@@ -3,6 +3,7 @@ import type { PluginAgentPanelProps, PluginClientContext, PluginSurfaceProps, Pl
 import { AgentDashboard, ArchivedSurface, DashboardSurface, WorkspaceDashboard } from "./client/dashboard";
 import { ScheduleSurface } from "./client/schedule-board";
 import { focusScheduleRuns, type ScheduleFocus } from "./client/schedule-focus";
+import { contributeObservationPills } from "./client/observation-pill";
 
 /**
  * Paseo 0.11 titles a page opened with `openSurface` (rather than from its sidebar item) by the screen's own title, and
@@ -15,6 +16,7 @@ function addTitledSurface(client: PluginClientContext, id: string, title: string
 }
 
 export default function contribute(client: PluginClientContext) {
+  const cleanupPills = contributeObservationPills(client);
   // An Agent's 定时任务 card opens 定时运行 on its schedule.
   const openSchedules = (focus: ScheduleFocus) => { focusScheduleRuns(focus); client.openSurface("schedule-runs"); };
   const Overview = (props: PluginSurfaceProps) => <DashboardSurface {...props} onOpenArchive={() => client.openSurface("archives")} onOpenSchedules={openSchedules} />;
@@ -36,5 +38,5 @@ export default function contribute(client: PluginClientContext) {
   client.addCommandCenterItem({ id: "inspect-workspace", title: "观测当前工作区", icon: "Activity", context: "workspace", onSelect({openPanel}) { openPanel("workspace-observatory"); } });
   client.addCommandCenterItem({ id: "inspect-agent", title: "观测当前 agent", icon: "ScanLine", context: "agent", onSelect({openPanel}) { openPanel("agent-inspector"); } });
   client.addSlashCommand({ name: "observe", argumentHint: "", description: "查看当前 agent 的执行详情与子任务", context: "agent", onSubmit({openPanel}) { openPanel("agent-inspector"); } });
-  return () => {};
+  return () => { cleanupPills(); };
 }
