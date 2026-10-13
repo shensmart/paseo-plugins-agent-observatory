@@ -39,6 +39,8 @@ import { FilterSheet, ProjectSheet, RangeSheet, readFilterNames, sessionScopeNam
 import { ActionMenu, Banner, Chip, ChipBar, EmptyState, IconButton, SearchField, Sheet, Skeleton, Spacer, SplitView, SyncStatus, Toolbar, fontSize, hueFor, space, useCompactLayout, type MenuAction } from "./kit";
 import { checkoutName, statusNames, useClock } from "./ui";
 import type { ScheduleFocus } from "./schedule-focus";
+import { useHostDirectory, type HostAgent } from "./use-host-directory";
+import { HostFilterBar } from "./host-filter";
 
 type DashboardProps = PluginSurfaceProps & { workspaceId?: string; initialAgentId?: string; archiveMode?: boolean; onOpenArchive?: () => void; onOpenOverview?: () => void;
   /** Opens 定时运行 on one schedule (from an Agent's 定时任务 card). */ onOpenSchedules?: (focus: ScheduleFocus) => void };
@@ -114,6 +116,8 @@ export function DashboardView({ theme, layout, host, navigation, workspaceId, in
   const [legendOpen, setLegendOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [hubPushed, setHubPushed] = useState(false);
+  const [hostFilter, setHostFilter] = useState("all");
+  const hostDirectory = useHostDirectory();
   const [statsRange, setStatsRange] = useState<StatsRange>("30d");
   const [dimension, setDimension] = useState<BreakdownDimension>("models");
   const now = useClock(30_000);
@@ -142,7 +146,13 @@ export function DashboardView({ theme, layout, host, navigation, workspaceId, in
   useEffect(() => () => { if (scrollSave.current) clearTimeout(scrollSave.current); }, []);
   const snoozes = preferences.snapshot?.snoozes ?? noSnoozes;
   // Analysis sessions the observatory starts itself (智能分析 runners) are reached from their reports, not listed as work.
-  const loadedAgents = useMemo(() => { const receipts = new Map((readReceipts ?? []).map(receipt => [receipt.agentId, receipt])); const origins = new Map((archiveOrigins ?? []).map(origin => [origin.agentId, origin])); return enrichAgents(data.agents.filter(agent => agent.labels["observatory.role"] !== "insight"), telemetry, background).map(agent => applyReadReceipt(applyArchiveReadOrigin(agent, origins.get(agent.id)), receipts.get(agent.id))); }, [data.agents, telemetry, background, readReceipts, archiveOrigins]);
+  const effectiveHostFilter = hostDirectory.hosts.length > 1 ? hostFilter : host.id;
+  const localLoadedAgents = useMemo(() => { const receipts = new Map((readReceipts ?? []).map(receipt => [receipt.agentId, receipt])); const origins = new Map((archiveOrigins ?? []).map(origin => [origin.agentId, origin])); return enrichAgents(data.agents.filter(agent => agent.labels["observatory.role"] !== "insight"), telemetry, background).map(agent => applyReadReceipt(applyArchiveReadOrigin(agent, origins.get(agent.id)), receipts.get(agent.id))); }, [data.agents, telemetry, background, readReceipts, archiveOrigins]);
+  const loadedAgents = useMemo(() => {
+    const merged = hostDirectory.data?.agents ?? [];
+    const source = effectiveHostFilter === "all" ? merged : effectiveHostFilter === host.id ? localLoadedAgents : merged.filter(agent => agent.hostId === effectiveHostFilter);
+    return source.filter(agent => agent.labels["observatory.role"] !== "insight");
+  }, [effectiveHostFilter, host.id, hostDirectory.data?.agents, localLoadedAgents]);
   const agents = useMemo(() => loadedAgents.filter(agent => archiveMode ? !!agent.archivedAt : !agent.archivedAt), [loadedAgents, archiveMode]);
   // Range, snooze and event-window filters change only at exact boundaries; between them the
   // derived lists keep their identity while displayed relative times still tick with `now`.
@@ -209,6 +219,13 @@ export function DashboardView({ theme, layout, host, navigation, workspaceId, in
   function selectAgent(agentId: string) {
     const agent = agents.find(candidate => candidate.id === agentId);
     if (agent) {
+      const hostAgent = agent as Partial<HostAgent>;
+      if (hostAgent.hostId && hostAgent.nativeId && (effectiveHostFilter === "all" || hostAgent.hostId !== host.id)) {
+        if (!navigation?.openAgent) { toast.error("请在 Paseo 会话列表中打开这个远程 Agent"); return; }
+        try { Promise.resolve(navigation.openAgent({ agentId: hostAgent.nativeId, serverId: hostAgent.hostId })).catch(error => toast.error(`会话打开失败：${error instanceof Error ? error.message : "请稍后重试"}`)); }
+        catch (error) { toast.error(`会话打开失败：${error instanceof Error ? error.message : "请稍后重试"}`); }
+        return;
+      }
       if (!harvestQueue.length && isUnreadCompletion(agent)) { const queue = harvestScope.filter(item => isUnreadCompletion(item) && !isCompletionSnoozed(item, snoozes, Date.now())).map(item => ({ id: item.id, token: knownCompletionAt(item)! })); setHarvestQueue(queue); setQueuePosition(Math.max(0, queue.findIndex(item => item.id === agentId))); }
       setSelectedId(agentId); return;
     }
@@ -303,6 +320,7 @@ export function DashboardView({ theme, layout, host, navigation, workspaceId, in
   const pushDetail = compact && !!selected && listTab;
   const chrome = !(compact && tab === "insights" && hubPushed);
   return <View onLayout={onLayout} style={{ flex: 1, minHeight: 0, backgroundColor: colors.surface0 }}>
+    {sessionsTab && !archiveMode && hostDirectory.hosts.length > 1 ? <HostFilterBar theme={theme} hosts={hostDirectory.hosts} agents={hostDirectory.data?.agents ?? []} unreadByHost={hostDirectory.data?.unreadByHost ?? new Map()} value={effectiveHostFilter} onChange={value => { setHostFilter(value); setSelectedId(null); }} /> : null}
     {pushDetail ? detail : <>
       {chrome ? <Toolbar theme={theme}>
         {archiveMode ? <Text numberOfLines={1} style={{ flexShrink: 1, color: colors.foregroundMuted, fontSize: fontSize.small }}>{archiveSummary}</Text>
