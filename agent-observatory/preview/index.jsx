@@ -2,7 +2,7 @@ import React, { useState, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import * as Lucide from "lucide-react";
-import { DashboardView } from "../client/dashboard";
+import { ObservatoryHub } from "../client/dashboard";
 import { ScheduleSurface } from "../client/schedule-board";
 import { focusScheduleRuns } from "../client/schedule-focus";
 import { ToastHost } from "./sdk-adapter";
@@ -55,7 +55,7 @@ function Preview() {
   return <QueryClientProvider client={client}>
     <HostBar />
     <div className="plugin-frame">
-      <DashboardView key="overview" theme={theme} host={host} navigation={navigation} layout={{ compact: innerWidth < 700, platform: "web" }}
+      <ObservatoryHub key="overview" theme={theme} host={host} navigation={navigation} layout={{ compact: innerWidth < 700, platform: "web" }}
         data={data} telemetry={fixtureTelemetry} background={scenario === "background" ? fixtureBackground : undefined} analytics={fixtureAnalytics} readReceipts={fixtureReadReceipts} archiveOrigins={fixtureArchiveOrigins} archiveMode={initialArchive} onRefresh={refresh}
         onOpenSchedules={focus => { focusScheduleRuns(focus); setSurface("schedules"); }} />
     </div>

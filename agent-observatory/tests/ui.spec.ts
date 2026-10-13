@@ -76,7 +76,7 @@ async function openArchiveView(page: Page) {
   await expect(page.getByRole("button", { name: /^需要处理/ })).toHaveCount(0);
 }
 async function openCurrentView(page: Page) {
-  await page.getByRole("tab", { name: "当前会话", exact: true }).click();
+  await page.getByRole("tab", { name: "当前打开会话", exact: true }).click();
   await expect(page.getByRole("button", { name: /^需要处理/ })).toBeVisible();
 }
 
@@ -128,7 +128,8 @@ test("overview quick scopes, status filtering, search, and fixture screenshot", 
   await expect(page.getByRole("button", { name: "未读 1", exact: true })).toBeVisible();
   // The first session is on screen right under the toolbar and chips.
   const first = await page.getByRole("button", { name: "查看 审查数据库迁移，待审批", exact: true }).boundingBox();
-  expect(first!.y).toBeLessThan(40 + 160);
+  // The merged observatory keeps the scope switch above the original toolbar/list chrome.
+  expect(first!.y).toBeLessThan(40 + 220);
   await noHorizontalOverflow(page);
   await screenshot(page, testInfo, "overview");
   await page.getByRole("button", { name: "需要处理 3", exact: true }).click();
@@ -175,15 +176,15 @@ test("后台执行中: a finished session whose subagent still works is 执行�
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
   await open(page, testInfo, "background");
-  await expect(page.getByRole("button", { name: "执行中 4", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "未读 1", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "需要处理 3", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "执行中 3", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "未读 0", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "需要处理 2", exact: true })).toBeVisible();
   const row = page.getByRole("button", { name: "查看 整理性能基线，执行中", exact: true });
   await expect(row.getByText("后台 · 整理压测脚本", { exact: true })).toBeVisible();
   await expect(row.getByText(/^后台 \d+:\d{2}$/)).toBeVisible();
   await noHorizontalOverflow(page);
   await screenshot(page, testInfo, "background-running");
-  await page.getByRole("button", { name: "执行中 4", exact: true }).click();
+  await page.getByRole("button", { name: "执行中 3", exact: true }).click();
   await expect(row).toBeVisible();
   await expect(page.getByRole("button", { name: "查看 准备移动端测试，启动中", exact: true })).toBeVisible();
   await row.click();
@@ -622,7 +623,7 @@ test("viewing results keeps them unread until an explicit acknowledgement and a 
   await expect(detail.getByRole("button", { name: "已读并看下一个", exact: true })).toHaveCount(0);
   await expect(detail.getByLabel("已完成，已读", { exact: true })).toBeVisible();
   await closeDetail(page);
-  await expect(page.getByRole("button", { name: "未读 1", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "未读 0", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "查看 整理性能基线，已完成", exact: true })).toBeVisible();
   const recorded = await marks(page);
   expect(recorded).toHaveLength(1);
@@ -835,9 +836,9 @@ test("snooze and next-result queue target one completion version and never clear
   await snooze(page);
   await expect(detail.getByText("验证重复请求", { exact: true })).toBeVisible();
   await closeDetail(page);
-  await expect(page.getByRole("button", { name: "未读 1", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "未读 0", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "稍后处理 1", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "未读 1", exact: true }).click();
+  await page.getByRole("button", { name: "未读 0", exact: true }).click();
   await expect(page.getByRole("button", { name: "查看 整理性能基线，已完成", exact: true })).toHaveCount(0);
   expect((await marks(page)).length).toBe(0);
   const next = await page.evaluate(() => (globalThis as Fixture).__previewCompleteAgent("performance-baseline"));

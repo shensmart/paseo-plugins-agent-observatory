@@ -1,6 +1,6 @@
 import type { ComponentType } from "react";
 import type { PluginAgentPanelProps, PluginClientContext, PluginSurfaceProps, PluginWorkspacePanelProps } from "@getpaseo/plugin/client";
-import { AgentDashboard, DashboardSurface, WorkspaceDashboard } from "./client/dashboard";
+import { AgentDashboard, ObservatoryHub, WorkspaceDashboard } from "./client/dashboard";
 import { ScheduleSurface } from "./client/schedule-board";
 import { focusScheduleRuns, type ScheduleFocus } from "./client/schedule-focus";
 import { contributeObservationPills } from "./client/observation-pill";
@@ -19,7 +19,7 @@ export default function contribute(client: PluginClientContext) {
   const cleanupPills = contributeObservationPills(client);
   // An Agent's 定时任务 card opens 定时运行 on its schedule.
   const openSchedules = (focus: ScheduleFocus) => { focusScheduleRuns(focus); client.openSurface("schedule-runs"); };
-  const Overview = (props: PluginSurfaceProps) => <DashboardSurface {...props} onOpenArchive={() => client.openSurface("archives")} onOpenSchedules={openSchedules} />;
+  const Overview = (props: PluginSurfaceProps) => <ObservatoryHub {...props} onOpenSchedules={openSchedules} />;
   const Workspace = (props: PluginWorkspacePanelProps) => <WorkspaceDashboard {...props} onOpenSchedules={openSchedules} />;
   const Inspector = (props: PluginAgentPanelProps) => <AgentDashboard {...props} onOpenSchedules={openSchedules} />;
   addTitledSurface(client, "observatory", "Agent 观测台", Overview);
