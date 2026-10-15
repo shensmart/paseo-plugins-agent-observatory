@@ -171,6 +171,32 @@ function FoldControls({ settings }: { settings: ReadySettings }) {
   );
 }
 
+const TURN_TIME_HINT =
+  "每一轮结束时，在本轮末尾追加一行常显的时间（年月日 + 时分秒）。" +
+  "Paseo 默认只在悬停时用提示显示时刻；这一行写在整轮结束之后，因此位置固定，总在本轮所有内容的下方。" +
+  "改动对所有设备生效，已经过去的轮次不会补写。";
+
+function TurnTimeControls({ settings }: { settings: ReadySettings }) {
+  const turnTime = settings.values.turnTime;
+  const changeTurnTime = (value: boolean) => {
+    if (value === turnTime) return;
+    void settings.save({ ...settings.values, turnTime: value }, settings.revision);
+  };
+  return (
+    <SettingsSection title="轮次时间">
+      <SettingsCard>
+        <SettingsSwitch
+          label="每轮结束后显示时间"
+          hint={TURN_TIME_HINT}
+          value={turnTime}
+          disabled={settings.saving}
+          onValueChange={changeTurnTime}
+        />
+      </SettingsCard>
+    </SettingsSection>
+  );
+}
+
 function ExpansionControls({ settings }: { settings: ReadySettings }) {
   const changeExpansion = (target: ExpansionTarget) => (value: string) => {
     const parsed = expansionModeSchema.safeParse(value);
@@ -258,6 +284,7 @@ export function ActivitySettings({ theme }: PluginSurfaceProps) {
     <>
       <TakeoverControls settings={settings} />
       <FoldControls settings={settings} />
+      <TurnTimeControls settings={settings} />
       <PaletteControls settings={settings} theme={theme} />
       <ExpansionControls settings={settings} />
     </>

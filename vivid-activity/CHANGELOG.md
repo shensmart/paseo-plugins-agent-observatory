@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.2-local.4 (2026-10-15)
+
+- Turn time is now written once per turn, at the end of that turn. This is the only position that a row can hold
+  reliably: the daemon's timeline only accepts appends (`agent.timeline.append.request`), so where a row lands is decided
+  by when it is written.
+- The previous revision wrote at the first row after a reply (a tool call, reasoning, the next reply). When a reply was
+  followed by two tool calls, the row landed between them. Ending the turn is the one moment after which the turn
+  produces nothing more, so the row always comes last.
+- A row can never sit directly under a reply's text or before the calls it triggered: the tool call is recorded when it
+  starts, so it is already in the timeline by the time the plugin hears about it.
+- Removed the per-segment subscription and idle timer along with the overlay/measurement code from the earlier
+  revisions. The server entry now writes one row from the `agent.turn_ended` hook.
+- The setting is 每轮结束后显示时间 again. Still on by default, still applies to every device, and nothing is backfilled.
+
 ## 0.4.1 (2026-10-10)
 
 Security hardening after an outside review of 0.4.0. Image previews, folding and timing work as before.

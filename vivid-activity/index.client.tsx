@@ -4,12 +4,14 @@ import { z } from "zod";
 import { ActivitySettings } from "./client/settings";
 import { ColorfulReasoning, ColorfulToolCall } from "./client/activity";
 import { FoldRow } from "./client/fold-row";
+import { TurnTimeRow } from "./client/turn-time";
 import { foldRuntime } from "./client/fold-runtime";
 import { BOUNDARY_ITEM_TYPES, observeBoundary, transformReasoning, transformToolCall } from "./client/transform";
 import { isSettingsChange, setLiveTakeover, startTakeover, type TakeoverPart } from "./client/takeover";
 import { installColorfulFonts } from "./client/web";
 import { foldIndexRpc } from "./shared/fold-index";
 import { activitySettings, foldFromValues } from "./shared/settings";
+import { TURN_TIME_RENDERER_KIND, TURN_TIME_RENDERER_VERSION, turnTimeDataSchema } from "./shared/turn-time";
 import {
   FOLD_RENDERER_KIND,
   FOLD_RENDERER_VERSION,
@@ -86,6 +88,13 @@ export default function contribute(client: PluginClientContext) {
     version: FOLD_RENDERER_VERSION,
     schema: foldItemDataSchema,
     Component: FoldRow,
+  });
+  // 本地补丁：每一轮末尾的时间行（由插件服务端在 `agent.turn_ended` 时写入）。
+  client.addTimelineRenderer({
+    kind: TURN_TIME_RENDERER_KIND,
+    version: TURN_TIME_RENDERER_VERSION,
+    schema: turnTimeDataSchema,
+    Component: TurnTimeRow,
   });
 
   // 本地补丁：折叠需要 Paseo 重新投影时，增删一个空渲染器——Paseo 会换一个新的组合转换函数，投影缓存随之失效

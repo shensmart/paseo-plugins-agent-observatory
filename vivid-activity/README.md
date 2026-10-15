@@ -27,6 +27,10 @@ Based on [Colorful Agent Activity](https://github.com/mcowger/paseo-plugins/tree
   and failed steps and the two most recent ones stay open; earlier steps fold into `前面 N 步`.
 - **Timing**: every row shows its duration, running rows count up live, and the fold row shows the elapsed time
   of the whole run.
+- **Turn time**: every turn ends with one quiet row carrying the time it finished, so each exchange is timestamped
+  without hovering. It is written when the turn ends, so it always sits after everything the turn produced; a timeline
+  can only be appended to, which is why a row cannot be placed inside a turn. Today's rows show `HH:MM:SS`, yesterday's
+  get a `昨天` prefix and older ones a date; a failed turn uses the danger colour. Set under 轮次时间, on by default.
 - **Detail cards**: highlighted commands with output, exit code and copy buttons; file reads with a language
   badge and line numbers; colored diffs; inline previews for images the agent read; dedicated views for Paseo's
   own tools, GitHub and Exa results.
@@ -41,6 +45,7 @@ The settings page (彩色活动行) offers:
 | 接管 (takeover) | all rows (default), thinking rows only, off |
 | 完成后折叠连续的思考与工具行 (fold finished steps) | on (default), off |
 | 行密度 (row density) | compact (default, 4 px between rows), standard (10 px) |
+| 每轮结束后显示时间 (turn time) | on (default), off |
 | 调色板 (palette) | vivid (default), follow theme, soft, high contrast |
 | 展开方式 (expansion) | per row kind: always, newest only, collapsed |
 

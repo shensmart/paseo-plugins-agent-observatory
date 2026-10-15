@@ -65,6 +65,9 @@ export type Density = z.output<typeof densitySchema>;
 export const DEFAULT_DENSITY: Density = "compact";
 export const DEFAULT_FOLD = true;
 
+/** 本地补丁：「每轮结束后在末尾显示一行时间」，默认打开。 */
+export const DEFAULT_TURN_TIME = true;
+
 export const activitySettings = defineSettings({
   id: "display",
   scope: "host",
@@ -76,6 +79,8 @@ export const activitySettings = defineSettings({
     // 本地补丁：「完成后折叠连续的思考与工具行」。旧设置没有这两项，读出来取默认值，所以版本号不变。
     fold: z.boolean().default(DEFAULT_FOLD),
     density: densitySchema.default(DEFAULT_DENSITY),
+    // 本地补丁：「显示结束时刻」。旧设置没有这一项，读出来取默认值，所以版本号不变。
+    turnTime: z.boolean().default(DEFAULT_TURN_TIME),
   }),
 });
 
@@ -85,6 +90,12 @@ export const DEFAULT_PALETTE_MODE: PaletteMode = "vivid";
 export function takeoverFromValues(values: unknown): TakeoverScope | null {
   const parsed = activitySettings.schema.safeParse(values ?? {});
   return parsed.success ? parsed.data.takeover : null;
+}
+
+/** 本地补丁：是否在每轮末尾追加时间行。 */
+export function turnTimeFromValues(values: unknown): boolean {
+  const parsed = activitySettings.schema.safeParse(values ?? {});
+  return parsed.success ? parsed.data.turnTime : DEFAULT_TURN_TIME;
 }
 
 /** The stored folding switch and takeover scope, or null when the stored values do not parse. */
