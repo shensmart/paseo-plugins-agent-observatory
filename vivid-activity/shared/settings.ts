@@ -68,7 +68,10 @@ export const DEFAULT_FOLD = true;
 /** 本地补丁：「每轮结束后在末尾显示一行时间」，默认打开。 */
 export const DEFAULT_TURN_TIME = true;
 
-/** 本地补丁：「折叠摘要行末尾显示这一段的结束时刻」，默认关闭。 */
+/**
+ * 本地补丁：「活动行末尾显示结束时刻」，默认关闭。摘要行显示这一段的结束时刻，单独的工具行和思考行显示自己那一条的。
+ * 存储键仍叫 `foldTime`（0.4.3-local.5 引入），改名要迁移旧值，不值得。
+ */
 export const DEFAULT_FOLD_TIME = false;
 
 export const activitySettings = defineSettings({

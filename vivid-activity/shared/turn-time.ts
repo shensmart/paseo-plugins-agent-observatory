@@ -39,3 +39,15 @@ export function formatTurnTime(at: number): string {
     `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
   );
 }
+
+/**
+ * 本地补丁：一条活动行的结束时刻标签。
+ *
+ * 时刻来自渲染器本来就拿到的 `timestamp`，也就是这一条最后一次更新时 daemon 收到事件的时间：工具行是完成事件、
+ * 思考行是最后一段思考。所以它和折叠索引里的 `at` 是同一个值，不需要多读一次时间线。
+ */
+export function endedStamp(at: number | Date, enabled: boolean, running: boolean): string | null {
+  if (!enabled || running) return null;
+  const ms = typeof at === "number" ? at : at.getTime();
+  return formatTurnTime(ms) || null;
+}

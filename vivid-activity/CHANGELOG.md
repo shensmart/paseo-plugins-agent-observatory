@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.3-local.6 (2026-10-16)
+
+- The end-time row label now covers every activity row, not only folded summaries. A run that never reached the fold
+  threshold (a single command, one thinking row) shows its own end time, which is exactly what was missing before: those
+  rows are drawn by the normal activity header, so they never went through a summary.
+- The time is the renderer's own `timestamp`, the same value the fold index carries as `at`, so this needs no extra
+  request and no server change. Running rows show nothing, and nothing is backfilled.
+- The setting is 活动行显示结束时刻 (still off by default; the stored key stays `foldTime`).
+
 ## 0.4.3-local.5 (2026-10-16)
 
 - A folded summary row can show when the run ended, after its status mark: a clock icon and the same full date and

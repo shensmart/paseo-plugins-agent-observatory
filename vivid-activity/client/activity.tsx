@@ -32,6 +32,7 @@ import { statusLabel } from "../shared/vivid-model";
 import { usePendingPermissions } from "./attention";
 import { densityMetrics, useDensity, useFoldRow, type DensityMetrics } from "./density";
 import { timingText, useLiveNow, useOnScreen, useRowTiming } from "./timing";
+import { endedStamp } from "../shared/turn-time";
 import { Breathe } from "./motion";
 import {
   cmonoTextEscape,
@@ -100,7 +101,7 @@ import { parseInlineMarkdown, parseReasoningMarkdown, type ReasoningMarkdownBloc
 import { readImageRpc, shouldAttemptImageLoad } from "../shared/read-image";
 import { exaToolKind } from "../shared/exa";
 import { githubToolKind } from "../shared/github";
-import { activitySettings, DEFAULT_EXPANSION, DEFAULT_PALETTE_MODE } from "../shared/settings";
+import { activitySettings, DEFAULT_EXPANSION, DEFAULT_FOLD_TIME, DEFAULT_PALETTE_MODE } from "../shared/settings";
 import type { ExpansionMode, ExpansionTarget } from "../shared/settings";
 import {
   isLatestTaskUpdate,
@@ -253,6 +254,12 @@ function useExpansionMode(target: ExpansionTarget): ExpansionMode {
   const settings = useSettings(activitySettings);
   if (settings.status === "ready") return settings.values.expansion[target] ?? DEFAULT_EXPANSION[target];
   return DEFAULT_EXPANSION[target];
+}
+
+/** 本地补丁：是否给活动行显示结束时刻（设置里的「活动行显示结束时刻」，默认关）。 */
+export function useRowStamp(): boolean {
+  const settings = useSettings(activitySettings);
+  return settings.status === "ready" ? settings.values.foldTime : DEFAULT_FOLD_TIME;
 }
 
 export function usePalette(theme: Theme): ActivityPalette {
@@ -2223,7 +2230,7 @@ function ActivityHeader({
   styles,
   vivid,
 }: {
-  vivid?: { theme: Theme; compact: boolean; look: LookKey; status?: RowStatus; statusText?: string; meta?: string; live?: boolean; icon?: string; metrics?: DensityMetrics; timing?: string | null };
+  vivid?: { theme: Theme; compact: boolean; look: LookKey; status?: RowStatus; statusText?: string; meta?: string; live?: boolean; icon?: string; metrics?: DensityMetrics; timing?: string | null; stamp?: string | null };
   icon: string;
   iconColor: string;
   title: string;
@@ -2254,6 +2261,7 @@ function ActivityHeader({
         icon={vivid.icon}
         metrics={vivid.metrics}
         timing={vivid.timing}
+        stamp={vivid.stamp}
         expanded={expanded}
         expandable={expandable}
         chevronColor={styles.summary.color}
@@ -2347,6 +2355,8 @@ export function ColorfulReasoning({
   const timing = useRowTiming(agentId, item.data.fold, isStreaming);
   const liveNow = useLiveNow(isStreaming && onScreen && timing?.start != null);
   const thinkTime = timingText(timing, isStreaming, liveNow);
+  // 本地补丁：这一条思考行的结束时刻（未折叠时用它自己的 timestamp，与折叠索引里的 at 同源）。
+  const thinkStamp = endedStamp(timestamp, useRowStamp(), isStreaming);
   const isLatest = useIsLatestReasoning(agentId, timestamp, isStreaming);
   const isLiveTail = useIsLiveTail(agentId, timestamp, isStreaming, layout.platform);
   const [userExpanded, setUserExpanded] = useState<boolean | null>(null);
@@ -2372,7 +2382,7 @@ export function ColorfulReasoning({
         expanded={expanded}
         onPress={toggle}
         styles={styles}
-        vivid={palette.mode === "vivid" ? { theme, compact: layout.compact, look: "think", meta, live: isStreaming, metrics } : undefined}
+        vivid={palette.mode === "vivid" ? { theme, compact: layout.compact, look: "think", meta, live: isStreaming, metrics, stamp: thinkStamp } : undefined}
       />
       {expanded ? (
         <View {...cmonoViewEscape} style={styles.details}>
@@ -2401,6 +2411,8 @@ export function ColorfulToolCall({
   const timing = useRowTiming(agentId, item.data.fold, isRunning);
   const liveNow = useLiveNow(isRunning && onScreen && timing?.start != null);
   const durationText = item.data.notice ? null : timingText(timing, isRunning, liveNow);
+  // 本地补丁：这一条工具行的结束时刻（未折叠时用它自己的 timestamp，与折叠索引里的 at 同源）。
+  const rowStamp = endedStamp(timestamp, useRowStamp(), isRunning);
   const isLatest = useIsLatestToolCall(agentId, timestamp, isRunning);
   const isLiveTail = useIsLiveTail(agentId, timestamp, isRunning, layout.platform);
   const detail = asToolCallDetail(item.data.detail);
@@ -2468,7 +2480,7 @@ export function ColorfulToolCall({
         onPress={toggle}
         expandable={expandable}
         styles={styles}
-        vivid={vivid ? { theme, compact: layout.compact, look, status: rowStatus, statusText, icon: item.data.presentation.fileIcon, metrics, timing: durationText } : undefined}
+        vivid={vivid ? { theme, compact: layout.compact, look, status: rowStatus, statusText, icon: item.data.presentation.fileIcon, metrics, timing: durationText, stamp: rowStamp } : undefined}
       />
       {operation && detail ? <PiSubagentLifecycleSummary toolName={item.data.name} input={undefined}
         output={detail.type === "sub_agent" ? detail.log : detail.type === "unknown" ? detail.output : undefined}

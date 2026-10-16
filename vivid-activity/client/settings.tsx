@@ -177,8 +177,8 @@ const TURN_TIME_HINT =
   "改动对所有设备生效，已经过去的轮次不会补写。";
 
 const FOLD_TIME_HINT =
-  "在折叠摘要行的状态标志后面显示这一段的结束时刻（2026年10月16日 10:25:25），和每轮末尾那行同一个格式。" +
-  "时刻属于这一段最后一步，所以展开后每行自己的用时不受影响。折叠关闭时这一项没有可见效果。";
+  "在活动行的状态标志后面显示结束时刻（2026年10月16日 10:25:25），和每轮末尾那行同一个格式。" +
+  "折叠摘要行显示这一段的结束时刻，单独的思考和工具行显示自己那一条的。已经过去的行不会补写。";
 
 function TurnTimeControls({ settings }: { settings: ReadySettings }) {
   const turnTime = settings.values.turnTime;
@@ -202,7 +202,7 @@ function TurnTimeControls({ settings }: { settings: ReadySettings }) {
           onValueChange={changeTurnTime}
         />
         <SettingsSwitch
-          label="折叠摘要行显示结束时刻"
+          label="活动行显示结束时刻"
           hint={FOLD_TIME_HINT}
           value={foldTime}
           disabled={settings.saving}
