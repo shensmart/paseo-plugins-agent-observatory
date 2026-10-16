@@ -124,7 +124,9 @@ describe("fold runtime timings", () => {
     expect(runtime.timing("agent-1", "r:think")).toEqual({ start: 1000, end: 2000, running: false, witnessed: false });
     const running = runtime.timing("agent-1", "t:a");
     expect(running).toEqual({ start: 2000, end: 3000, running: true, witnessed: true });
-    expect(heard).toBe(1);
+    // 本地补丁（0.5.0）：读到新的一页后额外通知一次——轮次可能变了，孤儿判定要跟着更新，
+    // 而耗时未必变化（测试里改用「至少通知一次、且行对象保持同一身份」）。
+    expect(heard).toBeGreaterThanOrEqual(1);
     expect(runtime.serverNow() - clock.now()).toBe(7_000);
     // The next live row starts where the last finished entry ended (the running call is not finished).
     expect(runtime.tailStart("agent-1")).toBe(2000);
@@ -134,12 +136,12 @@ describe("fold runtime timings", () => {
     await clock.advance(FOLD_TIMING.pokeDelay);
     expect(runtime.timing("agent-1", "t:a")).toBe(running);
     expect(runtime.tailStart("agent-1")).toBe(4000);
-    expect(heard).toBe(2);
+    expect(heard).toBeGreaterThanOrEqual(2);
     timeline.update(bash, { st: "completed", at: 9000 });
     runtime.poke();
     await clock.advance(FOLD_TIMING.pokeDelay);
     expect(runtime.timing("agent-1", "t:a")).toEqual({ start: 2000, end: 9000, running: false, witnessed: true });
-    expect(heard).toBe(3);
+    expect(heard).toBeGreaterThanOrEqual(3);
     unsubscribe();
   });
 });
@@ -455,5 +457,45 @@ describe("fold runtime", () => {
     expect(calls).toEqual(["tail"]);
     expect(runtime.roleFor("t:x")).toBe(SHOW);
     expect(runtime.timing(subagent, "t:x")).toBeNull();
+  });
+});
+
+// 本地补丁（0.5.0）：客户端偶尔一直拿着 `running` 的旧副本（宿主没把终态推给这一行），而索引里早已是终态。
+// 同一个 callId 到终态后不会回到 running，所以索引优先——这是「中断后一直转圈」最常见的那种。
+describe("indexedStatus", () => {
+  it("reports the index's status so a stale running copy can be corrected", async () => {
+    const clock = fakeClock();
+    const timeline = fakeTimeline();
+    timeline.append(shell("stale", "completed"));
+    const runtime = createFoldRuntime();
+    runtime.configure({ rpc: timeline.rpc.bind(timeline), nudge: () => {}, now: clock.now, setTimer: clock.setTimer, clearTimer: clock.clearTimer });
+    runtime.acquire("agent-stale");
+    await clock.advance(0);
+    expect(runtime.indexedStatus("agent-stale", "t:stale")).toBe("completed");
+    // 索引里没有的行（例如还没读到）返回 null，绝不猜。
+    expect(runtime.indexedStatus("agent-stale", "t:missing")).toBeNull();
+    runtime.release("agent-stale");
+  });
+});
+
+// 本地补丁（0.5.0）：往回翻的旧行不在索引窗口里（索引只读最后 160 行）。索引查不到时用时间兜底：
+// 行最后一次更新的时刻早于当前轮开始时间，就说明它属于已经过去的那一轮，没人会再更新它。
+describe("isOrphan outside the index window", () => {
+  it("treats a running row older than the active turn as left behind", async () => {
+    const clock = fakeClock();
+    const timeline = fakeTimeline();
+    timeline.append({ k: "t", key: "t:known", st: "running" });
+    const runtime = createFoldRuntime();
+    runtime.configure({ rpc: timeline.rpc.bind(timeline), nudge: () => {}, now: clock.now, setTimer: clock.setTimer, clearTimer: clock.clearTimer });
+    runtime.acquire("agent-orphan");
+    await clock.advance(0);
+
+    // Agent 已停（没有活跃轮）：索引外的行没人会再更新，判定为孤儿。
+    runtime.setRunning("agent-orphan", false);
+    expect(runtime.isOrphan("agent-orphan", "t:not-indexed", true, 1_000)).toBe(true);
+    // Agent 在跑、且这一行不在索引里：没有依据，不武断判定。
+    runtime.setRunning("agent-orphan", true);
+    expect(runtime.isOrphan("agent-orphan", "t:not-indexed", true, 1_000)).toBe(false);
+    runtime.release("agent-orphan");
   });
 });

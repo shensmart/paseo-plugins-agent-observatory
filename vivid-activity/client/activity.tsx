@@ -31,7 +31,7 @@ import { commandBadge, fileBadge, type Badge } from "../shared/brand";
 import { statusLabel } from "../shared/vivid-model";
 import { usePendingPermissions } from "./attention";
 import { densityMetrics, useDensity, useFoldRow, type DensityMetrics } from "./density";
-import { timingText, useLiveNow, useOnScreen, useOrphanRunning, useOrphanStreaming, useRowTiming } from "./timing";
+import { timingText, useIndexedToolStatus, useLiveNow, useOnScreen, useOrphanRunning, useOrphanStreaming, useRowTiming } from "./timing";
 import { endedStamp } from "../shared/turn-time";
 import { Breathe } from "./motion";
 import {
@@ -2351,7 +2351,9 @@ export function ColorfulReasoning({
   const styles = useActivityStyles(theme, palette, metrics);
   // 本地补丁（0.5.0）：同孤儿运行行的处理——一轮被中断时思考行也可能停在 streaming，而它所属的那一轮已经过去，
   // 就不再当它还在想（按轮次判定，理由见 client/timing.ts `useOrphanRunning`）。
-  const orphanedThinking = useOrphanStreaming(agentId, item.data.fold, item.data.phase);
+  const indexOrphanThinking = useOrphanStreaming(agentId, item.data.fold, item.data.phase, timestamp.getTime());
+  const idleAgentThinking = useAgent(agentId, (agent) => agent.status !== "running" && agent.status !== "initializing");
+  const orphanedThinking = indexOrphanThinking || (item.data.phase === "streaming" && idleAgentThinking === true);
   const phase: ReasoningItemData["phase"] = orphanedThinking ? "complete" : item.data.phase;
   const isStreaming = phase === "streaming";
   useFoldRow(agentId, item.data.fold, undefined, timestamp);
@@ -2409,13 +2411,22 @@ export function ColorfulToolCall({
   const palette = usePalette(theme);
   const metrics = densityMetrics(useDensity(), layout.compact, layout.platform !== "web");
   const styles = useActivityStyles(theme, palette, metrics);
-  // 本地补丁（0.5.0）：中断留下的孤儿运行行。宿主取消一轮时不重写还挂着 running 的 tool_call，
-  // Agent 已经停下就不会再有终态到达，把这种行按已取消显示，转圈和实时计时一起停下。
   const detail = asToolCallDetail(item.data.detail);
-  // 本地补丁（0.5.0）：按轮次判定孤儿运行行（见 client/timing.ts `useOrphanRunning`）。只按 Agent 状态会在
-  // 新的一轮开始后又把这些行当成「在跑」，所以交给折叠索引按 turn 归属判断。
-  const orphaned = useOrphanRunning(agentId, item.data.fold, item.data.status);
-  const status: ToolCallData["status"] = orphaned ? "canceled" : item.data.status;
+  // 本地补丁（0.5.0）：中断留下的「还在跑」的行，有两种表现，都要处理：
+  // 1. 客户端副本过期——宿主没把终态推给这一行，而 daemon 的投影时间线早已知道它结束了。同一个 callId 到终态后
+  //    不会再回到 running，所以索引里的终态优先（`useIndexedToolStatus`）。这是最常见的那个：行会一直转圈、
+  //    秒表一直走，看起来像"没人管"。
+  // 2. 真的是孤儿——它所属的那一轮已经不是当前活跃轮（按轮次判定），或者 Agent 已经停下。
+  // 子 Agent 例外：它自己收尾，活得比父 Agent 的这一轮久。
+  const outlives = detail?.type === "sub_agent";
+  const indexedStatus = useIndexedToolStatus(agentId, item.data.fold, item.data.status);
+  const staleRun = !outlives && item.data.status === "running" && indexedStatus !== null && indexedStatus !== "running";
+  const indexOrphan = useOrphanRunning(agentId, item.data.fold, item.data.status, timestamp.getTime());
+  const idleAgent = useAgent(agentId, (agent) => agent.status !== "running" && agent.status !== "initializing");
+  const orphaned = staleRun || indexOrphan || (item.data.status === "running" && idleAgent === true && !outlives);
+  // 索引里的终态（completed / failed / canceled）优先；没有依据时才按 interrupted 显示成已取消。
+  const status: ToolCallData["status"] =
+    staleRun && indexedStatus ? indexedStatus : orphaned ? "canceled" : item.data.status;
   const isRunning = status === "running";
   useFoldRow(agentId, item.data.fold, status, timestamp);
   // 本地补丁：耗时；运行中实时走表（只在前台、行在屏幕上时每秒刷新）。
@@ -2426,7 +2437,9 @@ export function ColorfulToolCall({
   // 本地补丁（0.5.0）：孤儿行没有真正的结束事件，耗时和结束时刻都会是假的，一律不显示。
   const durationText = item.data.notice || orphaned ? null : timingText(timing, isRunning, liveNow);
   // 本地补丁：这一条工具行的结束时刻（未折叠时用它自己的 timestamp，与折叠索引里的 at 同源）。
-  const rowStamp = orphaned ? null : endedStamp(timestamp, useRowStamp(), isRunning);
+  // 注意：Hook 必须无条件调用——`orphaned` 会在中断瞬间翻转，放在三元里会改变 Hook 数量，React 状态错位。
+  const showRowStamp = useRowStamp();
+  const rowStamp = orphaned ? null : endedStamp(timestamp, showRowStamp, isRunning);
   const isLatest = useIsLatestToolCall(agentId, timestamp, isRunning);
   const isLiveTail = useIsLiveTail(agentId, timestamp, isRunning, layout.platform);
   const isTaskUpdate = isTodoTool(item.data.name);

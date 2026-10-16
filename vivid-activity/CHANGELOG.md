@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.4.5-local.8 (2026-10-16)
+
+**Interrupted turns, second pass**
+
+The first pass keyed off turn ownership and the agent's status. Two more shapes of the same symptom turned up while
+testing, and they are the ones that actually happen most often:
+
+- A stale client copy. The daemon's projected timeline already says the call is `completed`, but the terminal status
+  never reached this row, so the client kept rendering its `running` snapshot: the row spun and its timer counted up
+  for as long as you left it. The timeline index is now authoritative for rows the client still calls `running`: a
+  call that reached a terminal status never returns to `running`, so a terminal status in the index wins. The index
+  says nothing about a row it has not read, and then nothing is guessed.
+- A row outside the index window. The index reads the tail 160 rows, so scrolling back to older rows left them with
+  no turn to compare against. Those fall back to time: a row whose last update predates the active turn's start
+  belongs to a turn that is over. With no active turn, a stopped agent is enough.
+- The rendered status is what folding and the row's own timer use, so a corrected row also stops counting and folds
+  as cancelled rather than live.
+
+**Also**
+
+- Turn and agent-status changes now notify row subscribers. Without it a row could be reclassified while its measured
+  duration stayed identical, so nothing re-rendered and the spinner stayed.
+- Fix a crash while rendering a cancelled sub-agent row: `parseSubAgentActionLog` threw `reading 'split'` on the
+  `undefined` log such a row can carry.
+- Fix a React hook-order bug introduced by the first pass: `useRowStamp()` was called from inside a conditional
+  expression, so the hook count changed at the moment a row flipped to cancelled. The error surfaced inside the
+  host's `useSettings` as `reading 'length'`, which made it look like a host bug. A static test now rejects any hook
+  called from a conditional expression.
+
 ## 0.4.4-local.7 (2026-10-16)
 
 **Interrupted turns**

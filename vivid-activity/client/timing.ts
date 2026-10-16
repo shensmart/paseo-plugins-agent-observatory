@@ -87,10 +87,30 @@ export function timingText(timing: RowTiming | null, running: boolean, liveNow: 
  * `isOrphanRunning`）：宿主取消一轮时不补终态，下一轮开始后 Agent 又变回 running，只看 Agent 状态会误判。
  * 行挂在屏幕上、索引就绪之前返回 false（照旧按现在拿到的状态画）。
  */
-export function useOrphanRunning(agentId: string, key: string | undefined, status: string | undefined): boolean {
+export function useOrphanRunning(agentId: string, key: string | undefined, status: string | undefined, at: number): boolean {
   const subscribe = useCallback((listener: () => void) => foldRuntime.subscribeTimings(agentId, listener), [agentId]);
   const read = useCallback(
-    () => (key && status === "running" ? foldRuntime.isOrphan(agentId, key, true) : false),
+    () => (key && status === "running" ? foldRuntime.isOrphan(agentId, key, true, at) : false),
+    [agentId, key, status, at],
+  );
+  return useSyncExternalStore(subscribe, read, read);
+}
+
+/**
+ * 本地补丁（0.5.0）：时间线索引里这一行的状态（索引没有时为 null）。
+ *
+ * 中断之后客户端偶尔会一直拿着 `running` 的旧副本（宿主没把终态推给这一行），而 daemon 的投影时间线早已知道它
+ * 结束了。同一个 callId 到终态后不会再回到 running，所以索引里的终态优先于客户端副本。
+ * 只在客户端说「还在跑」时才查索引，避免把正常的实时行按旧数据画停。
+ */
+export function useIndexedToolStatus(
+  agentId: string,
+  key: string | undefined,
+  status: string | undefined,
+): "running" | "completed" | "failed" | "canceled" | null {
+  const subscribe = useCallback((listener: () => void) => foldRuntime.subscribeTimings(agentId, listener), [agentId]);
+  const read = useCallback(
+    () => (key && status === "running" ? foldRuntime.indexedStatus(agentId, key) : null),
     [agentId, key, status],
   );
   return useSyncExternalStore(subscribe, read, read);
@@ -100,11 +120,11 @@ export function useOrphanRunning(agentId: string, key: string | undefined, statu
  * 本地补丁（0.5.0）：这一条思考行是不是停在一轮已经过去的 streaming 上（被中断的思考行没有终态）。
  * 只有整轮都不是当前活跃轮时才算；同一轮里的思考流仍在继续。
  */
-export function useOrphanStreaming(agentId: string, key: string | undefined, phase: string | undefined): boolean {
+export function useOrphanStreaming(agentId: string, key: string | undefined, phase: string | undefined, at: number): boolean {
   const subscribe = useCallback((listener: () => void) => foldRuntime.subscribeTimings(agentId, listener), [agentId]);
   const read = useCallback(
-    () => (key && phase === "streaming" ? foldRuntime.isOrphan(agentId, key, false) : false),
-    [agentId, key, phase],
+    () => (key && phase === "streaming" ? foldRuntime.isOrphan(agentId, key, false, at) : false),
+    [agentId, key, phase, at],
   );
   return useSyncExternalStore(subscribe, read, read);
 }
