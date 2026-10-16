@@ -1,4 +1,5 @@
 import { estimateStarts, formatDuration, MAX_UNWITNESSED_MS } from "./timing";
+import { formatTurnTime } from "./turn-time";
 import { COUNT_LABELS, isLookKey, type LookKey } from "./vivid-model";
 
 /**
@@ -84,6 +85,8 @@ export interface FoldSummary {
   canceled: number;
   /** done: from the content before the segment to its last step; null when unknown. */
   durationMs: number | null;
+  /** done: end time of the segment's last step (daemon clock, ms), the moment the step row was stamped. Null when unknown. */
+  endedAt: number | null;
 }
 
 export type FoldRole = { kind: "show" } | { kind: "hide" } | { kind: "fold"; summary: FoldSummary };
@@ -139,7 +142,7 @@ export function reasoningKey(text: string): string {
 export function roleSignature(role: FoldRole): string {
   if (role.kind !== "fold") return role.kind === "hide" ? "h" : "s";
   const s = role.summary;
-  return `f|${s.segment}|${s.mode}|${s.expanded ? 1 : 0}|${s.steps}|${s.hidden}|${s.failed}|${s.canceled}|${s.durationMs ?? ""}|${s.counts.map(([look, n]) => `${look}${n}`).join(",")}`;
+  return `f|${s.segment}|${s.mode}|${s.expanded ? 1 : 0}|${s.steps}|${s.hidden}|${s.failed}|${s.canceled}|${s.durationMs ?? ""}|${s.endedAt ?? ""}|${s.counts.map(([look, n]) => `${look}${n}`).join(",")}`;
 }
 
 interface Step {
@@ -284,6 +287,7 @@ export function planFolds(rows: readonly IndexRow[], options: FoldOptions): Fold
         failed: loaded.filter((step) => step.status === "failed").length,
         canceled: loaded.filter((step) => step.status === "canceled").length,
         durationMs,
+        endedAt: end > 0 ? end : null,
       };
       info.mode = "done";
       info.anchor = anchor.key;
@@ -312,6 +316,7 @@ export function planFolds(rows: readonly IndexRow[], options: FoldOptions): Fold
       failed: 0,
       canceled: earlierSteps.filter((step) => step.status === "canceled").length,
       durationMs: null,
+      endedAt: null,
     };
     info.mode = "earlier";
     info.anchor = anchor.key;
@@ -338,15 +343,17 @@ export function foldTitle(summary: Pick<FoldSummary, "mode" | "steps" | "hidden"
   return summary.mode === "earlier" ? `前面 ${summary.hidden} 步` : `${summary.steps} 步`;
 }
 
-/** Screen-reader label: 「展开 12 步：思考 2、命令 5，失败 1，用时 1 分 20 秒」. */
+/** Screen-reader label: 「展开 12 步：思考 2、命令 5，失败 1，用时 1 分 20 秒，结束于 2026年10月16日 10:25:25」. */
 export function foldAccessibilityLabel(
-  summary: Pick<FoldSummary, "mode" | "steps" | "hidden" | "expanded" | "failed" | "canceled" | "durationMs"> & { counts: ReadonlyArray<readonly [string, number]> },
+  summary: Pick<FoldSummary, "mode" | "steps" | "hidden" | "expanded" | "failed" | "canceled" | "durationMs" | "endedAt"> & { counts: ReadonlyArray<readonly [string, number]> },
 ): string {
   const parts = foldCountParts(summary.counts).map((part) => part.text).join("、");
+  const stamp = summary.mode === "done" ? formatTurnTime(summary.endedAt ?? 0) : "";
   const extras = [
     summary.failed > 0 ? `失败 ${summary.failed}` : null,
     summary.canceled > 0 ? `取消 ${summary.canceled}` : null,
     summary.mode === "done" ? (formatFoldDuration(summary.durationMs) ? `用时 ${formatFoldDuration(summary.durationMs)}` : null) : null,
+    stamp ? `结束于 ${stamp}` : null,
   ].filter(Boolean);
   return `${summary.expanded ? "收起" : "展开"} ${foldTitle(summary)}${parts ? `：${parts}` : ""}${extras.length ? `，${extras.join("，")}` : ""}`;
 }

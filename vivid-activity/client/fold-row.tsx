@@ -1,9 +1,12 @@
 import type { PluginTimelineItemProps } from "@getpaseo/plugin/client";
+import { useSettings } from "@getpaseo/plugin/client";
 import { Icon } from "@getpaseo/plugin/client/react-native";
 import { useCallback, useMemo } from "react";
 import { Pressable, Text, View, type TextStyle, type ViewStyle } from "react-native";
 import { foldAccessibilityLabel, foldCountParts, foldTitle, formatFoldDuration } from "../shared/fold";
+import { activitySettings, DEFAULT_FOLD_TIME } from "../shared/settings";
 import type { FoldItemData } from "../shared/timeline";
+import { formatTurnTime } from "../shared/turn-time";
 import { looks, type LookKey, type RowStatus } from "../shared/vivid-model";
 import { usePalette } from "./activity";
 import { densityMetrics, useDensity, useFoldRow } from "./density";
@@ -78,6 +81,9 @@ export function FoldRow({ agentId, item, theme, layout, timestamp }: PluginTimel
   const parts = useMemo(() => foldCountParts(data.counts), [data.counts]);
   const bar = useMemo(() => parts.map((part) => [part.look, data.counts.find(([look]) => look === part.look)?.[1] ?? 0] as const), [data.counts, parts]);
   const duration = done ? formatFoldDuration(data.durationMs) : null;
+  const settings = useSettings(activitySettings);
+  const showEndedAt = settings.status === "ready" ? settings.values.foldTime : DEFAULT_FOLD_TIME;
+  const endedAt = showEndedAt && done ? formatTurnTime(data.endedAt ?? 0) : null;
   const toggle = useCallback(() => foldRuntime.toggle(agentId, data.segment, !data.expanded), [agentId, data.expanded, data.segment]);
 
   const text = useMemo(
@@ -85,6 +91,7 @@ export function FoldRow({ agentId, item, theme, layout, timestamp }: PluginTimel
       title: { color: theme.colors.foreground, fontSize: 13, fontWeight: "700", lineHeight: metrics.lineHeight, flexShrink: 0 } satisfies TextStyle,
       counts: { color: theme.colors.foregroundMuted, fontSize: 12, lineHeight: metrics.lineHeight, flexShrink: 1, minWidth: 0 } satisfies TextStyle,
       meta: { color: theme.colors.foregroundMuted, fontSize: 12, lineHeight: metrics.lineHeight, flexShrink: 0, fontVariant: ["tabular-nums"] } satisfies TextStyle,
+      stamp: { color: theme.colors.foregroundMuted, fontSize: 12, lineHeight: metrics.lineHeight, flexShrink: 0, fontVariant: ["tabular-nums"] } satisfies TextStyle,
     }),
     [metrics.lineHeight, theme],
   );
@@ -123,6 +130,12 @@ export function FoldRow({ agentId, item, theme, layout, timestamp }: PluginTimel
         {data.failed > 0 ? <StatusPill theme={theme} status="failed" text={`失败 ${data.failed}`} /> : null}
         {duration ? <Text {...cuiTextEscape} numberOfLines={1} style={text.meta}>{duration}</Text> : null}
         {done ? <StatusMark theme={theme} status={status} size={14} /> : null}
+        {endedAt ? (
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 4, flexShrink: 0 }}>
+            <Icon name="Clock" size={12} color={theme.colors.foregroundMuted} />
+            <Text {...cuiTextEscape} numberOfLines={1} style={text.stamp}>{endedAt}</Text>
+          </View>
+        ) : null}
         <Icon name={data.expanded ? "ChevronDown" : "ChevronRight"} size={12} color={theme.colors.foregroundMuted} />
         {changes > 0 && done ? <Flash count={changes} color={withAlpha(hue(theme, status === "failed" ? "red" : "green"), 0.22)} radius={8} /> : null}
       </Pressable>

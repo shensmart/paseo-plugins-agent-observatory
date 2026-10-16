@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.3-local.5 (2026-10-16)
+
+- A folded summary row can show when the run ended, after its status mark: a clock icon and the same full date and
+  time the turn row uses (`2026年10月16日 10:25:25`). The setting 折叠摘要行显示结束时刻 is off by default; there is no
+  backfill and no extra request, because the end time of a run is already part of the fold index the client keeps for
+  timing.
+
 ## 0.4.2-local.4 (2026-10-15)
 
 - Turn time is now written once per turn, at the end of that turn. This is the only position that a row can hold

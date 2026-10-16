@@ -26,7 +26,9 @@ Based on [Colorful Agent Activity](https://github.com/mcowger/paseo-plugins/tree
   step failed and the run's total time. Tap it to see the steps again. While the agent works, only running, waiting
   and failed steps and the two most recent ones stay open; earlier steps fold into `前面 N 步`.
 - **Timing**: every row shows its duration, running rows count up live, and the fold row shows the elapsed time
-  of the whole run.
+  of the whole run. The fold row can also show the time the run ended, such as `2026年10月16日 10:25:25`, after the
+  status mark.
+- **Fold row end time**: optionally show when a folded run finished, next to its total duration. Off by default.
 - **Turn time**: every turn ends with one quiet row carrying the time it finished, so each exchange is timestamped
   without hovering. It is written when the turn ends, so it always sits after everything the turn produced; a timeline
   can only be appended to, which is why a row cannot be placed inside a turn. Today's rows show `HH:MM:SS`, yesterday's

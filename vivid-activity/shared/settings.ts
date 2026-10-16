@@ -68,6 +68,9 @@ export const DEFAULT_FOLD = true;
 /** 本地补丁：「每轮结束后在末尾显示一行时间」，默认打开。 */
 export const DEFAULT_TURN_TIME = true;
 
+/** 本地补丁：「折叠摘要行末尾显示这一段的结束时刻」，默认关闭。 */
+export const DEFAULT_FOLD_TIME = false;
+
 export const activitySettings = defineSettings({
   id: "display",
   scope: "host",
@@ -81,6 +84,8 @@ export const activitySettings = defineSettings({
     density: densitySchema.default(DEFAULT_DENSITY),
     // 本地补丁：「显示结束时刻」。旧设置没有这一项，读出来取默认值，所以版本号不变。
     turnTime: z.boolean().default(DEFAULT_TURN_TIME),
+    // 本地补丁：「折叠摘要行显示结束时刻」。同上，旧设置读出默认值。
+    foldTime: z.boolean().default(DEFAULT_FOLD_TIME),
   }),
 });
 

@@ -176,14 +176,23 @@ const TURN_TIME_HINT =
   "Paseo 默认只在悬停时用提示显示时刻；这一行写在整轮结束之后，因此位置固定，总在本轮所有内容的下方。" +
   "改动对所有设备生效，已经过去的轮次不会补写。";
 
+const FOLD_TIME_HINT =
+  "在折叠摘要行的状态标志后面显示这一段的结束时刻（2026年10月16日 10:25:25），和每轮末尾那行同一个格式。" +
+  "时刻属于这一段最后一步，所以展开后每行自己的用时不受影响。折叠关闭时这一项没有可见效果。";
+
 function TurnTimeControls({ settings }: { settings: ReadySettings }) {
   const turnTime = settings.values.turnTime;
+  const foldTime = settings.values.foldTime;
   const changeTurnTime = (value: boolean) => {
     if (value === turnTime) return;
     void settings.save({ ...settings.values, turnTime: value }, settings.revision);
   };
+  const changeFoldTime = (value: boolean) => {
+    if (value === foldTime) return;
+    void settings.save({ ...settings.values, foldTime: value }, settings.revision);
+  };
   return (
-    <SettingsSection title="轮次时间">
+    <SettingsSection title="时间显示">
       <SettingsCard>
         <SettingsSwitch
           label="每轮结束后显示时间"
@@ -191,6 +200,13 @@ function TurnTimeControls({ settings }: { settings: ReadySettings }) {
           value={turnTime}
           disabled={settings.saving}
           onValueChange={changeTurnTime}
+        />
+        <SettingsSwitch
+          label="折叠摘要行显示结束时刻"
+          hint={FOLD_TIME_HINT}
+          value={foldTime}
+          disabled={settings.saving}
+          onValueChange={changeFoldTime}
         />
       </SettingsCard>
     </SettingsSection>

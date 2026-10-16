@@ -61,7 +61,7 @@ describe("fold keys", () => {
   it("signs roles so a changed summary needs drawing again", () => {
     expect(roleSignature({ kind: "show" })).toBe("s");
     expect(roleSignature({ kind: "hide" })).toBe("h");
-    const summary = { segment: "4", mode: "done" as const, expanded: false, steps: 3, hidden: 3, counts: [["shell", 2], ["read", 1]] as Array<[LookKey, number]>, failed: 0, canceled: 0, durationMs: 4000 };
+    const summary = { segment: "4", mode: "done" as const, expanded: false, steps: 3, hidden: 3, counts: [["shell", 2], ["read", 1]] as Array<[LookKey, number]>, failed: 0, canceled: 0, durationMs: 4000, endedAt: 4000 };
     expect(roleSignature({ kind: "fold", summary })).toBe(roleSignature({ kind: "fold", summary: { ...summary } }));
     expect(roleSignature({ kind: "fold", summary })).not.toBe(roleSignature({ kind: "fold", summary: { ...summary, expanded: true } }));
     expect(roleSignature({ kind: "fold", summary })).not.toBe(roleSignature({ kind: "fold", summary: { ...summary, steps: 4, hidden: 4 } }));
@@ -76,7 +76,7 @@ describe("planFolds: finished segments", () => {
     expect(segments.map((segment) => [segment.id, segment.mode, segment.sealed])).toEqual([["2", "done", true], ["6", "done", true]]);
     expect(summaryOf(roles, rows[1]!)).toEqual({
       segment: "2", mode: "done", expanded: false, steps: 3, hidden: 3,
-      counts: [["think", 1], ["read", 1], ["shell", 1]], failed: 0, canceled: 0, durationMs: 3000,
+      counts: [["think", 1], ["read", 1], ["shell", 1]], failed: 0, canceled: 0, durationMs: 3000, endedAt: 4000,
     });
     expect(summaryOf(roles, rows[5]!).counts).toEqual([["shell", 2], ["edit", 1]]);
   });
@@ -290,7 +290,7 @@ describe("fold texts", () => {
       { look: "read", text: "读取 3" },
       { look: "other", text: "其他 1" },
     ]);
-    const summary = { mode: "done" as const, steps: 12, hidden: 12, expanded: false, counts: [["think", 2], ["shell", 5]] as Array<[string, number]>, failed: 1, canceled: 0, durationMs: 80_000 };
+    const summary = { mode: "done" as const, steps: 12, hidden: 12, expanded: false, counts: [["think", 2], ["shell", 5]] as Array<[string, number]>, failed: 1, canceled: 0, durationMs: 80_000, endedAt: 0 };
     expect(foldAccessibilityLabel(summary)).toBe("展开 12 步：思考 2、命令 5，失败 1，用时 1 分 20 秒");
     expect(foldAccessibilityLabel({ ...summary, mode: "earlier", hidden: 7, expanded: true, failed: 0 })).toBe("收起 前面 7 步：思考 2、命令 5");
   });

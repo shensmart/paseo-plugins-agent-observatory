@@ -83,6 +83,8 @@ export const foldItemDataSchema = z.object({
   failed: z.number().int().nonnegative(),
   canceled: z.number().int().nonnegative(),
   durationMs: z.number().nonnegative().nullable(),
+  /** 本地补丁：这一段的结束时刻（daemon 时钟 ms）。旧数据没有这一项，读出 null。 */
+  endedAt: z.number().nonnegative().nullable().default(null),
 });
 export type FoldItemData = z.output<typeof foldItemDataSchema>;
 

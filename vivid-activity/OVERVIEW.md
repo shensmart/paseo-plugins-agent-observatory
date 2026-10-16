@@ -1,6 +1,6 @@
 Vivid Activity redraws an agent's thinking and tool-call rows in the chat as compact, color-coded activity rows. Every kind of step has its own color and icon: thinking violet, file reads blue, edits green, commands orange, searches indigo, web requests cyan, sub-agents magenta, MCP tools pink and Paseo's own tools sky blue. Every row also shows its state: a blue spinner while it runs, an amber pulse while it waits for your approval, red when it fails (with the exit code for commands), and a short green flash when it finishes. Each turn ends with one quiet row carrying the time it finished.
 
-When a run of thinking and tool steps has finished, it folds into one summary row with the number of steps, a count per kind, failures and the total time. Tap it to see the steps again. While the agent is still working, only the running, waiting and failed steps and the two most recent ones stay visible. Each row shows how long its step took, and running rows count up live.
+When a run of thinking and tool steps has finished, it folds into one summary row with the number of steps, a count per kind, failures and the total time; it can also show when the run ended. Tap it to see the steps again. While the agent is still working, only the running, waiting and failed steps and the two most recent ones stay visible. Each row shows how long its step took, and running rows count up live.
 
 The interface is in Simplified Chinese. Based on Colorful Agent Activity by Matt Cowger.
 
@@ -15,7 +15,8 @@ No setup is needed. Requires Paseo 0.11.1 or later. The settings page is titled 
 - Takeover: all rows (default), thinking rows only, or off. A change redraws the open chat right away.
 - Fold finished thinking and tool steps: on by default.
 - Row density: compact (default, 4 px between rows) or standard (10 px).
-- Turn time: one row at the end of every turn (on by default), written when the turn ends so its place is always the same. Today's rows show a clock time, older ones a date, and a failed turn uses the danger colour. Nothing from before the plugin was installed is backfilled.
+- Turn time: one row at the end of every turn (on by default), written when the turn ends so its place is always the same. It shows a full date and time, and a failed turn uses the danger colour. Nothing from before the plugin was installed is backfilled.
+- Fold row end time (off by default): shows when a folded run finished, next to its total duration. The time belongs to the run's last step; per-row durations are unaffected.
 - Palette: vivid (default), follow the theme accent, soft, or high contrast.
 - Expansion for each kind of row: always, newest only, or collapsed. Reads, edits, writes, commands and questions start collapsed.
 
