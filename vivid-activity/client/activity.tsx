@@ -31,7 +31,7 @@ import { commandBadge, fileBadge, type Badge } from "../shared/brand";
 import { statusLabel } from "../shared/vivid-model";
 import { usePendingPermissions } from "./attention";
 import { densityMetrics, useDensity, useFoldRow, type DensityMetrics } from "./density";
-import { timingText, useLiveNow, useOnScreen, useRowTiming } from "./timing";
+import { timingText, useLiveNow, useOnScreen, useOrphanRunning, useOrphanStreaming, useRowTiming } from "./timing";
 import { endedStamp } from "../shared/turn-time";
 import { Breathe } from "./motion";
 import {
@@ -1941,6 +1941,8 @@ function SubAgentProgress({
 }) {
   const actions = useMemo(() => {
     const explicitActions = [...(detail.actions ?? [])].sort((left, right) => left.index - right.index);
+    // 本地补丁（0.5.0）：无论如何都返回数组。中断留下的行可能既没有 actions 也没有 log，
+    // 以前这里会拿到 undefined 再读 .length，整个行渲染失败。
     return explicitActions.length > 0 ? explicitActions : parseSubAgentActionLog(detail.log);
   }, [detail.actions, detail.log]);
   const hiddenActionCount = Math.max(0, actions.length - MAX_VISIBLE_SUBAGENT_ACTIONS);
@@ -2347,7 +2349,11 @@ export function ColorfulReasoning({
   const palette = usePalette(theme);
   const metrics = densityMetrics(useDensity(), layout.compact, layout.platform !== "web");
   const styles = useActivityStyles(theme, palette, metrics);
-  const isStreaming = item.data.phase === "streaming";
+  // 本地补丁（0.5.0）：同孤儿运行行的处理——一轮被中断时思考行也可能停在 streaming，而它所属的那一轮已经过去，
+  // 就不再当它还在想（按轮次判定，理由见 client/timing.ts `useOrphanRunning`）。
+  const orphanedThinking = useOrphanStreaming(agentId, item.data.fold, item.data.phase);
+  const phase: ReasoningItemData["phase"] = orphanedThinking ? "complete" : item.data.phase;
+  const isStreaming = phase === "streaming";
   useFoldRow(agentId, item.data.fold, undefined, timestamp);
   // 本地补丁：「思考了 8.4 秒」；思考中实时走表（只在前台、行在屏幕上时）。
   const rootRef = useRef<View>(null);
@@ -2386,7 +2392,7 @@ export function ColorfulReasoning({
       />
       {expanded ? (
         <View {...cmonoViewEscape} style={styles.details}>
-          <ReasoningText text={item.data.text} phase={item.data.phase} theme={theme} palette={palette} styles={styles} />
+          <ReasoningText text={item.data.text} phase={phase} theme={theme} palette={palette} styles={styles} />
         </View>
       ) : null}
     </View>
@@ -2403,19 +2409,26 @@ export function ColorfulToolCall({
   const palette = usePalette(theme);
   const metrics = densityMetrics(useDensity(), layout.compact, layout.platform !== "web");
   const styles = useActivityStyles(theme, palette, metrics);
-  const isRunning = item.data.status === "running";
-  useFoldRow(agentId, item.data.fold, item.data.status, timestamp);
+  // 本地补丁（0.5.0）：中断留下的孤儿运行行。宿主取消一轮时不重写还挂着 running 的 tool_call，
+  // Agent 已经停下就不会再有终态到达，把这种行按已取消显示，转圈和实时计时一起停下。
+  const detail = asToolCallDetail(item.data.detail);
+  // 本地补丁（0.5.0）：按轮次判定孤儿运行行（见 client/timing.ts `useOrphanRunning`）。只按 Agent 状态会在
+  // 新的一轮开始后又把这些行当成「在跑」，所以交给折叠索引按 turn 归属判断。
+  const orphaned = useOrphanRunning(agentId, item.data.fold, item.data.status);
+  const status: ToolCallData["status"] = orphaned ? "canceled" : item.data.status;
+  const isRunning = status === "running";
+  useFoldRow(agentId, item.data.fold, status, timestamp);
   // 本地补丁：耗时；运行中实时走表（只在前台、行在屏幕上时每秒刷新）。
   const rootRef = useRef<View>(null);
   const onScreen = useOnScreen(rootRef, isRunning);
   const timing = useRowTiming(agentId, item.data.fold, isRunning);
   const liveNow = useLiveNow(isRunning && onScreen && timing?.start != null);
-  const durationText = item.data.notice ? null : timingText(timing, isRunning, liveNow);
+  // 本地补丁（0.5.0）：孤儿行没有真正的结束事件，耗时和结束时刻都会是假的，一律不显示。
+  const durationText = item.data.notice || orphaned ? null : timingText(timing, isRunning, liveNow);
   // 本地补丁：这一条工具行的结束时刻（未折叠时用它自己的 timestamp，与折叠索引里的 at 同源）。
-  const rowStamp = endedStamp(timestamp, useRowStamp(), isRunning);
+  const rowStamp = orphaned ? null : endedStamp(timestamp, useRowStamp(), isRunning);
   const isLatest = useIsLatestToolCall(agentId, timestamp, isRunning);
   const isLiveTail = useIsLiveTail(agentId, timestamp, isRunning, layout.platform);
-  const detail = asToolCallDetail(item.data.detail);
   const isTaskUpdate = isTodoTool(item.data.name);
   const itemTimestamp = timestamp.getTime();
   const latestTaskUpdateTimestamp = useLatestTaskUpdateTimestamp(agentId, timestamp, isTaskUpdate);
@@ -2423,7 +2436,7 @@ export function ColorfulToolCall({
   const [userExpanded, setUserExpanded] = useState<boolean | null>(null);
   const [taskUpdateOverride, setTaskUpdateOverride] = useState<TaskUpdateExpansionOverride | null>(null);
   const categoryColor = palette.categoryColors[item.data.presentation.category];
-  const statusColor = palette.statusColors[item.data.status];
+  const statusColor = palette.statusColors[status];
   const configuredExpansion = useExpansionMode(expansionTargetForToolCall(item.data.name, detail?.type ?? "unknown"));
   // 本地补丁：后台任务通知默认收起（说明已在行头）。
   const expansionMode = item.data.notice ? "never" : configuredExpansion;
@@ -2458,7 +2471,7 @@ export function ColorfulToolCall({
   const pending = usePendingPermissions(agentId);
   const callId = item.data.callId;
   const waiting = isRunning && (callId ? pending.ids.has(callId) : pending.any && pending.ids.size === 0 && isLatest);
-  const rowStatus: RowStatus = waiting ? "waiting" : item.data.status;
+  const rowStatus: RowStatus = waiting ? "waiting" : status;
   const look = lookFor(item.data.name, detail, item.data.presentation);
   const mcp = look === "mcp" ? mcpParts(item.data.name) : null;
   const vividTitle = mcp ? "MCP" : zh(item.data.presentation.label);
@@ -2473,7 +2486,7 @@ export function ColorfulToolCall({
         title={vividTitle}
         summary={vividSummary}
         fileDisplay={headerFile ?? undefined}
-        status={item.data.status}
+        status={status}
         statusColor={statusColor}
         stats={item.data.presentation.diffStats}
         expanded={expanded}

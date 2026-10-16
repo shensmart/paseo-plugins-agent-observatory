@@ -34,6 +34,11 @@ export interface IndexRow {
   notice?: { ref: string | null; foreground: boolean };
   /** Boundary kind, for debugging and tests. */
   what?: string;
+  /**
+   * 本地补丁（0.5.0）：这一行可能比它所属的这一轮活得久。子 Agent（Claude 的 Task、Codex 的子线程……）在父 Agent 停下来
+   * 之后仍会继续跑并自己收尾，所以它挂着 running 不代表宿主漏了终态，不能按「孤儿行」处理。见 `isOrphanRunning`。
+   */
+  outlives?: boolean;
   /** Paseo's `turnId` of the entry (0.3.0-local.3): timing never reaches into an earlier turn, and a new turn starts a new segment. */
   turn?: string;
 }
@@ -43,7 +48,14 @@ export interface FoldOptions {
   scope: "all" | "reasoning";
   /** 「完成后折叠连续的思考与工具行」. Off: everything stays visible (foreground notices still merge). */
   enabled: boolean;
-  /** The Agent's turn is running: the trailing segment is still growing. */
+  /**
+   * The Agent's turn is running: the trailing segment is still growing.
+   *
+   * 本地补丁（0.5.0）：宿主在中断一轮时不会给正在运行的工具行补一条终态（Claude 的 mapper 会补，Codex/ACP 不会），
+   * 那条行就一直停在 running。Agent 已经停下（这里是 false）时不会再有任何东西来更新它，所以把这种「没人再管」的
+   * running 行按 canceled 处理，摘要里的取消计数、行的颜色和转圈都跟着它走。真正的终态一旦到达（completed/failed/
+   * canceled）就以它为准，这里不会插手。
+   */
   agentRunning: boolean;
   /** The user's choice for a segment id; undefined = default (collapsed). */
   expanded?: (segment: string) => boolean | undefined;
@@ -61,6 +73,11 @@ export interface FoldOptions {
   witnessed?: (key: string) => boolean;
   /** Tool call ids waiting for the user's approval. */
   waiting?: ReadonlySet<string>;
+  /**
+   * 本地补丁（0.5.0）：这一行是不是「被中断留下的」运行行（它所属的那一轮已经不是当前活跃轮）。给了它就以它为准，
+   * 因为只看 `agentRunning` 会在新一轮开始后又把这些行当成在跑（宿主取消一轮时不会补终态）。
+   */
+  orphaned?: (key: string) => boolean;
   /** Most recent settled rows a running segment keeps visible besides its running ones (default 2). */
   keep?: number;
   /** Smallest finished segment that folds (default 2 steps). */
@@ -244,6 +261,23 @@ function isWaiting(step: Step, options: FoldOptions): boolean {
   return Boolean(callId && options.waiting?.has(callId));
 }
 
+/**
+ * 本地补丁（0.5.0）：中断留下的孤儿运行行。
+ *
+ * 宿主取消一轮时只把 Agent 置回 idle，不会重写这一轮里还挂着 running 的 tool_call（见 0.5.0 的 CHANGELOG）。Agent 已停时，
+ * 没人会再来更新这些行，所以把它们当作 canceled：不计入「运行中」，摘要里数进 canceled，行上也不再转圈。
+ * 只对 agentRunning 为 false 生效；Agent 在跑时 running 就是真的在跑。
+ */
+export function isOrphanRunning(status: StepStatus, agentRunning: boolean, outlives = false): boolean {
+  return status === "running" && !agentRunning && !outlives;
+}
+
+/** The status a step is shown with: its own, or canceled when it is an orphaned running row. */
+function shownStatus(step: Step, options: FoldOptions): StepStatus {
+  if (options.orphaned) return options.orphaned(step.key) ? "canceled" : step.status;
+  return isOrphanRunning(step.status, options.agentRunning, step.row.outlives) ? "canceled" : step.status;
+}
+
 /** Computes every row's fold role for one agent timeline. Rows without a role show as usual. */
 export function planFolds(rows: readonly IndexRow[], options: FoldOptions): FoldPlan {
   const keep = options.keep ?? 2;
@@ -258,7 +292,8 @@ export function planFolds(rows: readonly IndexRow[], options: FoldOptions): Fold
     const foldable = segment.steps.filter((step) => !step.merged);
     const countable = foldable.filter((step) => !step.notice);
     const sealed = segment.followed || !options.agentRunning;
-    const running = !sealed || foldable.some((step) => step.status === "running" || isWaiting(step, options));
+    // 本地补丁（0.5.0）：Agent 停下后残留的 running 行按 canceled 处理，不再让这一段看起来还在跑。
+    const running = !sealed || foldable.some((step) => shownStatus(step, options) === "running" || isWaiting(step, options));
     const info: SegmentInfo = { id, keys: segment.steps.map((step) => step.key), sealed, running, mode: "open", anchor: null };
     infos.push(info);
     if (!options.enabled || foldable.length === 0) continue;
@@ -285,7 +320,7 @@ export function planFolds(rows: readonly IndexRow[], options: FoldOptions): Fold
         hidden: loaded.length,
         counts: countLooks(loaded),
         failed: loaded.filter((step) => step.status === "failed").length,
-        canceled: loaded.filter((step) => step.status === "canceled").length,
+        canceled: loaded.filter((step) => shownStatus(step, options) === "canceled").length,
         durationMs,
         endedAt: end > 0 ? end : null,
       };
@@ -299,7 +334,7 @@ export function planFolds(rows: readonly IndexRow[], options: FoldOptions): Fold
     }
 
     // Running: keep running, waiting and failed rows plus the two most recent settled ones; fold the finished beginning.
-    const live = (step: Step) => step.status === "running" || isWaiting(step, options);
+    const live = (step: Step) => shownStatus(step, options) === "running" || isWaiting(step, options);
     const recent = new Set(foldable.filter((step) => !live(step)).slice(-keep));
     const earlier = foldable.filter((step) => !recent.has(step) && !step.ambiguous && !live(step) && step.status !== "failed");
     const earlierSteps = earlier.filter((step) => !step.notice && isPresent(step, options));
@@ -314,7 +349,7 @@ export function planFolds(rows: readonly IndexRow[], options: FoldOptions): Fold
       hidden: earlierSteps.length,
       counts: countLooks(earlierSteps),
       failed: 0,
-      canceled: earlierSteps.filter((step) => step.status === "canceled").length,
+      canceled: earlierSteps.filter((step) => shownStatus(step, options) === "canceled").length,
       durationMs: null,
       endedAt: null,
     };

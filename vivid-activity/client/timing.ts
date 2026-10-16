@@ -81,3 +81,30 @@ export function useOnScreen(ref: RefObject<unknown>, watch: boolean): boolean {
 export function timingText(timing: RowTiming | null, running: boolean, liveNow: number | null): string | null {
   return rowTimeText(timing, running, liveNow);
 }
+
+/**
+ * 本地补丁（0.5.0）：这一条工具行是不是「被中断留下的」运行行。折叠索引按轮次判定（见 fold-runtime 的
+ * `isOrphanRunning`）：宿主取消一轮时不补终态，下一轮开始后 Agent 又变回 running，只看 Agent 状态会误判。
+ * 行挂在屏幕上、索引就绪之前返回 false（照旧按现在拿到的状态画）。
+ */
+export function useOrphanRunning(agentId: string, key: string | undefined, status: string | undefined): boolean {
+  const subscribe = useCallback((listener: () => void) => foldRuntime.subscribeTimings(agentId, listener), [agentId]);
+  const read = useCallback(
+    () => (key && status === "running" ? foldRuntime.isOrphan(agentId, key, true) : false),
+    [agentId, key, status],
+  );
+  return useSyncExternalStore(subscribe, read, read);
+}
+
+/**
+ * 本地补丁（0.5.0）：这一条思考行是不是停在一轮已经过去的 streaming 上（被中断的思考行没有终态）。
+ * 只有整轮都不是当前活跃轮时才算；同一轮里的思考流仍在继续。
+ */
+export function useOrphanStreaming(agentId: string, key: string | undefined, phase: string | undefined): boolean {
+  const subscribe = useCallback((listener: () => void) => foldRuntime.subscribeTimings(agentId, listener), [agentId]);
+  const read = useCallback(
+    () => (key && phase === "streaming" ? foldRuntime.isOrphan(agentId, key, false) : false),
+    [agentId, key, phase],
+  );
+  return useSyncExternalStore(subscribe, read, read);
+}

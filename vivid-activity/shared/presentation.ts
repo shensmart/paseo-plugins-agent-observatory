@@ -2515,9 +2515,11 @@ export function resolveSubAgentActionPresentation(
   return { icon: "Wrench", label: toolName.trim() || "Tool" };
 }
 
-export function parseSubAgentActionLog(log: string): readonly SubAgentAction[] {
+export function parseSubAgentActionLog(log: string | null | undefined): readonly SubAgentAction[] {
   const actions: SubAgentAction[] = [];
-  for (const line of log.split(/\r?\n/)) {
+  // 本地补丁（0.5.0）：被中断的子 Agent 任务行可能没有 log（宿主只发了终态，没有内容），
+  // 以前这里会抛 `Cannot read properties of undefined (reading 'split')`，整行渲染失败。
+  for (const line of (log ?? "").split(/\r?\n/)) {
     const match = line.trim().match(/^\[([^\]]+)\]\s*(.*)$/);
     if (!match?.[1]) continue;
     const toolName = match[1].trim();

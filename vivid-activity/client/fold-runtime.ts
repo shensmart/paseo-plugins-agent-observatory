@@ -157,6 +157,13 @@ export interface FoldRuntime {
   scheduleNudge(priority: NudgePriority): void;
   /** Timing of one row; the same object until it changes. */
   timing(agentId: string, key: string): RowTiming | null;
+  /**
+   * 本地补丁（0.5.0）：这一行是不是「被中断留下的」——它所属的那一轮已经不是此刻活跃的那一轮（或此刻没有活跃轮）。
+   * 宿主取消一轮时不会给还挂着 running 的 tool_call 补终态，也不会把停在 streaming 的思考行收尾；新一轮开始后
+   * agent.status 又会变回 running，只看 Agent 状态会把它们误当成还在跑，所以这里按轮次判定。
+   * `live` 为 true 时只对 tool 行里 status === "running" 的那些成立。
+   */
+  isOrphan(agentId: string, key: string, live: boolean): boolean;
   /** Start estimate for a live row the index does not know yet. */
   tailStart(agentId: string): number | null;
   subscribeTimings(agentId: string, listener: () => void): () => void;
@@ -412,7 +419,8 @@ export function createFoldRuntime(): FoldRuntime {
       const timing: RowTiming = {
         start: starts.get(row.seq) ?? null,
         end: row.at,
-        running: row.kind === "tool" && row.status === "running",
+        // 本地补丁（0.5.0）：被中断留下的 running 行不会再变，别让它按运行中实时走表（按轮次判定）。
+        running: row.kind === "tool" && row.status === "running" && !runtime.isOrphan(agent.agentId, row.key, true),
         witnessed: agent.witnessed.has(row.key),
       };
       const previous = agent.timings.get(row.key);
@@ -487,6 +495,8 @@ export function createFoldRuntime(): FoldRuntime {
           contested: (key) => contested.has(key),
           turnStart: (turn) => agent.turnStarts.get(turn) ?? null,
           witnessed: (key) => agent.witnessed.has(key),
+          // 本地补丁（0.5.0）：被中断留下的运行行按轮次判定，见 FoldOptions.orphaned。
+          orphaned: (key) => runtime.isOrphan(agent.agentId, key, true),
         })
       : { roles: new Map<string, FoldRole>(), segments: [] };
     agent.plan = plan;
@@ -684,6 +694,20 @@ export function createFoldRuntime(): FoldRuntime {
     },
     timing(agentId, key) {
       return agents.get(agentId)?.timings.get(key) ?? null;
+    },
+    isOrphan(agentId, key, live) {
+      const agent = agents.get(agentId);
+      if (!agent || !agent.loaded) return false;
+      const row = agent.byKey.get(key);
+      if (!row || (row.kind !== "tool" && row.kind !== "reasoning")) return false;
+      if (live && !(row.kind === "tool" && row.status === "running")) return false;
+      // 子 Agent 自己收尾，父 Agent 的轮次结束不代表它结束。
+      if (row.outlives) return false;
+      // 这一行没有轮次信息（旧宿主）：退回只看「Agent 是否在跑」。
+      if (row.turn === undefined) return agent.running === false;
+      const active = agent.activeTurn;
+      // 没有活跃轮，或活跃轮换了：这一行所属的那一轮已经过去，没人会再更新它。
+      return !active || active.id !== row.turn;
     },
     tailStart(agentId) {
       return agents.get(agentId)?.tailStart ?? null;

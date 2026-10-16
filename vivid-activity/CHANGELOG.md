@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.4.4-local.7 (2026-10-16)
+
+**Interrupted turns**
+
+- A row left at `running` by an interrupted turn no longer spins, and its timer stops. The host does not rewrite a
+  `tool_call` that was still running when a turn was cancelled (Claude Code's mapper does; Codex and ACP providers do
+  not), so the row stayed `running` forever and live-timed from its start.
+- The test is by turn, not by agent status: a row counts as left behind only when the turn it belongs to is no longer
+  the agent's active turn. Keying off `agent.status` alone brought those rows back to life the moment a new turn
+  started. Rows whose turn is unknown (older hosts) fall back to the agent status, and a sub-agent row is never
+  treated this way: it finishes on its own schedule, after its parent's turn ends.
+- Such a row shows as 已取消, its duration and end-time labels are suppressed rather than invented, and folding counts
+  it as cancelled instead of live. Thinking rows left at `streaming` by the same interruption stop reading as
+  「思考中…」 too.
+- The fold index carries the new `o` flag for rows that can outlive their turn (sub-agents); older clients ignore it.
+
+**Fixes**
+
+- `parseSubAgentActionLog` accepted only a string and threw `reading 'split'` on the `undefined` log a cancelled
+  sub-agent row can carry, which failed the whole row's render. It now accepts `null`/`undefined` and returns an empty
+  list, with a regression test.
+
 ## 0.4.3-local.6 (2026-10-16)
 
 - The end-time row label now covers every activity row, not only folded summaries. A run that never reached the fold

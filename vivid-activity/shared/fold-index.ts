@@ -28,6 +28,8 @@ export const wireRowSchema = z.object({
   look: z.enum(LOOK_KEYS).optional(),
   ref: z.string().max(400).optional(),
   fg: z.boolean().optional(),
+  /** 0.5.0: 这一行可能比它所属的这一轮活得久（子 Agent），中断时不能按「已取消」处理。 */
+  o: z.boolean().optional(),
   w: z.string().max(40).optional(),
   /** Index of the entry's turn in the page's `turns` table (0.3.0-local.3). */
   u: z.number().int().nonnegative().optional(),
@@ -206,6 +208,8 @@ export function wireRowFromEntry(entry: unknown): WireRow | null {
     key: toolKey(tool.callId),
     st: status,
     look,
+    // 本地补丁（0.5.0）：子 Agent 的一行由子 Agent 自己收尾，父 Agent 的轮次结束不代表它结束。
+    ...(tool.detail?.type === "sub_agent" ? { o: true } : {}),
     ...(notice?.ref ? { ref: notice.ref } : {}),
     ...(notice ? { fg: isForegroundNotice(notice) } : {}),
   };
@@ -245,6 +249,7 @@ export function indexRowFromWire(row: WireRow, turns?: readonly WireTurn[]): Ind
     seq: row.s,
     ...(row.e !== undefined ? { seqEnd: row.e } : {}),
     at: row.at,
+    ...(row.o ? { outlives: true } : {}),
     kind,
     ...(row.key ? { key: row.key } : {}),
     ...(row.st ? { status: row.st } : {}),

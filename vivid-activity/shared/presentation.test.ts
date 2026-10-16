@@ -367,6 +367,10 @@ describe("colorful activity presentation", () => {
   });
 
   it("recovers Claude-style sub-agent actions from the provider log", () => {
+    // 本地补丁（0.5.0）：被中断的任务行没有 log，解析器不能抛错（宿主只在终态里给状态，不给内容）。
+    expect(parseSubAgentActionLog(undefined)).toEqual([]);
+    expect(parseSubAgentActionLog(null)).toEqual([]);
+    expect(parseSubAgentActionLog("")).toEqual([]);
     expect(parseSubAgentActionLog("[Read] README.md\n[Shell] git status\nnot an action")).toEqual([
       { index: 0, toolName: "Read", summary: "README.md" },
       { index: 1, toolName: "Shell", summary: "git status" },

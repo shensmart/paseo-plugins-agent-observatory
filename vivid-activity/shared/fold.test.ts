@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   foldAccessibilityLabel,
+  isOrphanRunning,
   foldCountParts,
   foldTitle,
   formatFoldDuration,
@@ -151,11 +152,44 @@ describe("planFolds: running segments", () => {
     expect(foldTitle(summaryOf(roles, rows[1]!))).toBe("前面 5 步");
   });
 
-  it("treats a run with a running row as live even when text follows it (parallel tools)", () => {
+  // 本地补丁（0.5.0）：宿主中断一轮时不重写还挂着 running 的行，Agent 停下后没人再来更新它们，
+  // 所以这种「孤儿行」按 canceled 处理：段不再显示成还在跑，摘要里数进取消。
+  it("reads running rows left behind by a stopped agent as canceled", () => {
     const rows = [...run(6), boundary(20)];
     rows[2] = tool(3, "running");
     const { roles, segments } = planFolds(rows, options({ agentRunning: false }));
-    expect(segments[0]).toMatchObject({ sealed: true, running: true, mode: "earlier" });
+    expect(segments[0]).toMatchObject({ sealed: true, running: false, mode: "done" });
+    expect(summaryOf(roles, rows[1]!)).toMatchObject({ steps: 6, failed: 0, canceled: 2 });
+  });
+
+  it("leaves a running row alone while the agent is running", () => {
+    const rows = [...run(6)];
+    rows[2] = tool(3, "running");
+    expect(planFolds(rows, options({ agentRunning: true })).segments[0]).toMatchObject({ running: true });
+  });
+
+  // 新一轮开始后 agentRunning 又是 true：按轮次判定，上一轮留下的 running 行仍然是孤儿。
+  it("uses the row's own turn once a new turn started", () => {
+    const old = (row: IndexRow): IndexRow => ({ ...row, turn: "turn-1" });
+    const rows = [boundary(1, "user_message"), old(tool(2, "completed")), old(tool(3, "running")), tool(9, "running", "shell", { turn: "turn-2" })];
+    const orphaned = (key: string) => key === rows[2]!.key;
+    const plan = planFolds(rows, options({ agentRunning: true, orphaned }));
+    // 上一轮那段（已完成 + 被中断）不再算 live，被中断的行计入取消。
+    expect(plan.segments[0]).toMatchObject({ sealed: true, running: false });
+    const summary = plan.segments[0]!.anchor;
+    expect(summary).not.toBeNull();
+    const role = plan.roles.get(summary!);
+    expect(role?.kind === "fold" ? role.summary.canceled : null).toBe(1);
+    // 新一轮那条仍然算在跑。
+    expect(plan.segments.at(-1)).toMatchObject({ running: true });
+  });
+
+  // 子 Agent 比父 Agent 的这一轮活得久：它挂着 running 是正常的，不能按孤儿行处理。
+  it("keeps a running sub-agent row live after its agent stopped", () => {
+    const rows = [...run(6)];
+    rows[2] = tool(3, "running", "agent", { outlives: true });
+    const { roles, segments } = planFolds(rows, options({ agentRunning: false }));
+    expect(segments[0]).toMatchObject({ running: true, mode: "earlier" });
     expect(roles.get(rows[2]!.key!)).toBeUndefined();
   });
 
@@ -180,6 +214,17 @@ describe("planFolds: running segments", () => {
     const rows = run(8);
     const { roles } = planFolds(rows, options({ agentRunning: true, expanded: () => true }));
     expect(kinds(roles, rows)).toEqual(["|", "fold", "show", "show", "show", "show", "-", "-", "-"]);
+  });
+});
+
+describe("isOrphanRunning", () => {
+  it("only claims a running row once its agent stopped, and never a sub-agent's", () => {
+    expect(isOrphanRunning("running", false)).toBe(true);
+    expect(isOrphanRunning("running", true)).toBe(false);
+    expect(isOrphanRunning("running", false, true)).toBe(false);
+    expect(isOrphanRunning("completed", false)).toBe(false);
+    expect(isOrphanRunning("failed", false)).toBe(false);
+    expect(isOrphanRunning("canceled", false)).toBe(false);
   });
 });
 
